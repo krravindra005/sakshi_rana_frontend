@@ -1,0 +1,6 @@
+{
+  "name": "Adult Classifieds Marketplace",
+  "description": "A premium, discreet, and modern adult classifieds marketplace UI/UX prototype.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

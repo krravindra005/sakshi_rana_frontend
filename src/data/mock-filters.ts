@@ -1,0 +1,62 @@
+import { FacetConfig } from '../types/filter';
+
+export const mockFilterConfig: FacetConfig = {
+  nationalities: [
+    { label: 'Indian', value: 'Indian' },
+    { label: 'Russian', value: 'Russian' },
+    { label: 'Ukrainian', value: 'Ukrainian' },
+    { label: 'Brazilian', value: 'Brazilian' },
+    { label: 'Spanish', value: 'Spanish' },
+    { label: 'British', value: 'British' },
+    { label: 'Italian', value: 'Italian' },
+    { label: 'Thai', value: 'Thai' },
+  ],
+  ethnicities: [
+    { label: 'Asian', value: 'Asian' },
+    { label: 'Caucasian / White', value: 'Caucasian' },
+    { label: 'Latin / Hispanic', value: 'Latin' },
+    { label: 'Middle Eastern', value: 'Middle Eastern' },
+    { label: 'Mixed / Multiracial', value: 'Mixed' },
+    { label: 'African / Black', value: 'African' },
+  ],
+  bodyTypes: [
+    { label: 'Slim', value: 'Slim' },
+    { label: 'Athletic / Fit', value: 'Athletic' },
+    { label: 'Curvy / Voluptuous', value: 'Curvy' },
+    { label: 'Average', value: 'Average' },
+    { label: 'Petite', value: 'Petite' },
+  ],
+  hairColors: [
+    { label: 'Black', value: 'Black' },
+    { label: 'Brunette / Brown', value: 'Brunette' },
+    { label: 'Blonde', value: 'Blonde' },
+    { label: 'Red / Auburn', value: 'Red' },
+    { label: 'Dyed / Colorful', value: 'Dyed' },
+  ],
+  services: [
+    { label: 'Social Event Companion', value: 'Social Event' },
+    { label: 'Discreet Private Meeting', value: 'Discreet Private' },
+    { label: 'VIP Dinner Companion', value: 'VIP Dinner' },
+    { label: 'Travel & Holiday Partner', value: 'Travel Partner' },
+    { label: 'Full Body Massage', value: 'Full Body Massage' },
+    { label: 'Swedish Therapeutic Massage', value: 'Swedish Therapeutic' },
+    { label: 'Deep Tissue Relaxation', value: 'Deep Tissue' },
+    { label: 'Aromatherapy Session', value: 'Aromatherapy' },
+    { label: 'Overnight Companion', value: 'Overnight' },
+    { label: 'Casual Conversation / Coffee', value: 'Conversation' },
+    { label: 'Adult Roleplay Meetings', value: 'Roleplay' },
+    { label: 'Couples Consultation', value: 'Couples' },
+  ],
+  intendedAudiences: [
+    { label: 'Men', value: 'Men' },
+    { label: 'Women', value: 'Women' },
+    { label: 'Couples', value: 'Couples' },
+    { label: 'Everyone (18+)', value: 'Everyone' },
+  ],
+  placesOfService: [
+    { label: 'Provider Location (In-call)', value: 'Provider Location' },
+    { label: 'Customer Location (Out-call)', value: 'Customer Location' },
+    { label: 'Hotel Booking', value: 'Hotel' },
+    { label: 'Discreet Travel', value: 'Discreet Travel' },
+  ],
+};
