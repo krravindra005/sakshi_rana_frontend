@@ -247,7 +247,7 @@ export const Header: React.FC = () => {
             <button
               id="btn-post-ad"
               onClick={() => navigateTo('/post-ad')}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs lg:text-sm py-2 px-3 lg:px-4 rounded-lg shadow-sm transition"
+              className="hidden md:flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs lg:text-sm py-2 px-3 lg:px-4 rounded-lg shadow-sm transition"
             >
               <PlusCircle className="w-4 h-4" />
               <span>Post Your Ad</span>
@@ -352,6 +352,15 @@ export const Header: React.FC = () => {
         <div className="md:hidden border-t border-slate-100 bg-white animate-in slide-in-from-top-4 duration-200">
           <div className="px-4 pt-3 pb-6 space-y-4">
             
+            {/* Mobile Post Ad CTA */}
+            <button
+              onClick={() => { setIsMobileMenuOpen(false); navigateTo('/post-ad'); }}
+              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition"
+            >
+              <PlusCircle className="w-5 h-5" />
+              <span>Post Your Ad</span>
+            </button>
+
             {/* Mobile Location */}
             <div>
               <p className="text-xs font-semibold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Select Location</p>
