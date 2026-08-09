@@ -233,7 +233,7 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
               <div className="border-t border-slate-100 pt-6">
                 <h3 className="text-base font-bold text-slate-950 mb-4">Companion Specifications</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  {Object.entries(ad.attributes).map(([key, val]) => {
+                  {Object.entries(ad.attributes || {}).map(([key, val]) => {
                     if (key === 'placeOfService') return null; // rendered separately
                     return (
                       <div key={key} className="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
@@ -253,7 +253,7 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
               <div className="border-t border-slate-100 pt-6">
                 <h3 className="text-base font-bold text-slate-950 mb-3">Services Offered</h3>
                 <div className="flex flex-wrap gap-2">
-                  {ad.services.map((svc) => (
+                  {(ad.services || []).map((svc) => (
                     <span
                       key={svc}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100/50 rounded-xl text-xs font-semibold"

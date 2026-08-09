@@ -41,7 +41,7 @@ import { ReportsView } from './components/admin/ReportsView';
 import { BusinessView } from './components/admin/BusinessView';
 import { SeoView } from './components/admin/SeoView';
 import { SettingsView } from './components/admin/SettingsView';
-import { FolderTree } from 'lucide-react';
+import { FolderTree, ShieldAlert, Lock, ArrowLeft } from 'lucide-react';
 
 function AppContent() {
   const { route, navigateTo, isLoading } = useRouter();
@@ -50,6 +50,7 @@ function AppContent() {
   // Real reactive auth states
   const [isLoggedIn, setIsLoggedIn] = useState(UsersService.isLoggedIn());
   const [isVerified, setIsVerified] = useState(UsersService.isFullyVerified());
+  const [currentUser, setCurrentUser] = useState(UsersService.getProfile());
   const [adminRole, setAdminRole] = useState<AdminRole>('Super Admin');
 
   useEffect(() => {
@@ -61,6 +62,7 @@ function AppContent() {
     const handleAuthStateChange = () => {
       setIsLoggedIn(UsersService.isLoggedIn());
       setIsVerified(UsersService.isFullyVerified());
+      setCurrentUser(UsersService.getProfile());
     };
     window.addEventListener('auth_state_changed', handleAuthStateChange);
     return () => window.removeEventListener('auth_state_changed', handleAuthStateChange);
@@ -71,14 +73,64 @@ function AppContent() {
   };
 
   const handleAgeReject = () => {
-    // Discreetly redirect minors away
     window.location.href = 'https://www.google.com';
   };
 
-  const showAuthGate = !isLoggedIn || !isVerified;
+  const isAuthRoute = route.path === '/login' || route.path === '/register';
+  const isUserProtectedRoute = route.path === '/post-ad' || route.path === '/dashboard';
   const isAdminRoute = route.path === '/admin';
 
+  // Check admin role authorization
+  const isAdminUser = isLoggedIn && (
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'super_admin' ||
+    currentUser?.role === 'moderator' ||
+    adminRole === 'Super Admin'
+  );
+
+  // 1. AUTHENTICATION ROUTE GUARD FOR PROTECTED USER ROUTES
+  if (isUserProtectedRoute && !isLoggedIn) {
+    const currentFullUrl = window.location.pathname + window.location.search;
+    navigateTo(`/login?redirect=${encodeURIComponent(currentFullUrl)}`);
+    return null;
+  }
+
+  // 2. AUTHENTICATION & AUTHORIZATION ROUTE GUARD FOR ADMIN ROUTES
   if (isAdminRoute) {
+    if (!isLoggedIn) {
+      const currentFullUrl = window.location.pathname + window.location.search;
+      navigateTo(`/login?redirect=${encodeURIComponent(currentFullUrl)}`);
+      return null;
+    }
+
+    if (!isAdminUser) {
+      // 403 Forbidden Access Page for non-admin logged-in users
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-50">
+          <ShieldAlert className="w-16 h-16 text-rose-500 mb-4 animate-bounce" />
+          <h1 className="text-3xl font-extrabold text-slate-900 mb-2">403 - Access Denied</h1>
+          <p className="text-slate-600 max-w-md mb-6 font-mono text-sm">
+            You do not have administrative privileges to access the Admin Console.
+          </p>
+          <div className="flex gap-4">
+            <button 
+              onClick={() => navigateTo('/dashboard')} 
+              className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 transition-colors shadow-sm flex items-center gap-2"
+            >
+              <Lock size={16} /> User Dashboard
+            </button>
+            <button 
+              onClick={() => navigateTo('/')} 
+              className="px-6 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl font-medium hover:bg-slate-100 transition-colors shadow-sm flex items-center gap-2"
+            >
+              <ArrowLeft size={16} /> Go to Marketplace
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Admin layout render
     return (
       <AdminLayout activeRole={adminRole} setActiveRole={setAdminRole}>
         {route.subPath === 'dashboard' && <DashboardView />}
@@ -106,6 +158,26 @@ function AppContent() {
     );
   }
 
+  // 3. AUTH PAGE RENDER (/login or /register)
+  if (isAuthRoute) {
+    if (isLoggedIn && isVerified) {
+      const redirectTarget = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : '/dashboard';
+      navigateTo(redirectTarget);
+      return null;
+    }
+
+    return (
+      <div className="flex flex-col min-h-screen bg-white">
+        <Header />
+        <div className="flex-1">
+          <AuthPage initialMode={route.path === '/register' ? 'signup' : 'login'} />
+        </div>
+        <Footer />
+      </div>
+    );
+  }
+
+  // 4. MAIN PUBLIC MARKETPLACE LAYOUT
   return (
     <div className="flex flex-col min-h-screen bg-white selection:bg-indigo-500 selection:text-white">
       
@@ -130,9 +202,9 @@ function AppContent() {
             Securing discreet connection...
           </p>
         </div>
-      ) : showAuthGate ? (
+      ) : isUserProtectedRoute && !isVerified ? (
         <div className="flex-1">
-          <AuthPage initialMode={!isLoggedIn ? 'login' : 'verify_email'} />
+          <AuthPage initialMode="verify_email" />
         </div>
       ) : (
         <div className="flex-1">
@@ -151,7 +223,7 @@ function AppContent() {
             </div>
           )}
 
-          {/* CLASSIFIED LISTINGS HUB PATH: "/category-city" */}
+          {/* CLASSIFIED LISTINGS HUB PATH: "/category-city" or "/search" */}
           {route.path === '/category-city' && (
             <ListingGrid 
               categorySlug={route.category} 

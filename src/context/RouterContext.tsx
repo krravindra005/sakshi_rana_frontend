@@ -38,6 +38,12 @@ const parseUrl = (): RouteInfo => {
   if (segments.length === 0) {
     // Homepage
     routeInfo.path = '/';
+  } else if (segments[0] === 'login') {
+    routeInfo.path = '/login';
+  } else if (segments[0] === 'register' || segments[0] === 'signup') {
+    routeInfo.path = '/register';
+  } else if (segments[0] === 'search') {
+    routeInfo.path = '/category-city';
   } else if (segments[0] === 'ad' && segments[1]) {
     // /ad/[slug]
     routeInfo.path = '/ad';
@@ -69,7 +75,7 @@ const parseUrl = (): RouteInfo => {
     routeInfo.category = segments[0];
     routeInfo.city = segments[1];
   } else if (segments.length === 1) {
-    // Let's assume it could be category-only, or fallback
+    // /[category]
     routeInfo.path = '/category-city';
     routeInfo.category = segments[0];
   }

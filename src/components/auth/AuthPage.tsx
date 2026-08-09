@@ -25,7 +25,14 @@ interface AuthPageProps {
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClose }) => {
-  const { navigateTo } = useRouter();
+  const { route, navigateTo } = useRouter();
+
+  const getRedirectTarget = () => {
+    if (route.searchParams.redirect) {
+      return decodeURIComponent(route.searchParams.redirect);
+    }
+    return '/dashboard';
+  };
   const [mode, setMode] = useState<'login' | 'signup' | 'verify_email' | 'verify_phone' | 'success'>(initialMode);
   
   // Form States
@@ -159,7 +166,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
             if (!UsersService.isFullyVerified()) {
               setMode('verify_email');
             } else {
-              navigateTo('/');
+              navigateTo(getRedirectTarget());
               if (onClose) onClose();
             }
           }, 800);
@@ -287,7 +294,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
 
   // Final access trigger
   const handleEnterPlatform = () => {
-    navigateTo('/');
+    navigateTo(getRedirectTarget());
     if (onClose) onClose();
   };
 

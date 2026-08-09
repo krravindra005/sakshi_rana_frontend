@@ -1,57 +1,66 @@
 import { UserProfile } from '../types/user';
 import { UsersService } from './users.service';
+import { apiClient, ApiResponse } from '../lib/api/client';
 
 export class AuthService {
   /**
-   * Register a new user
+   * Register a new user via API V2
    */
   static async register(data: { name: string; email: string; phone: string; password?: string }): Promise<UserProfile> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const profile = UsersService.register(data);
-        resolve(profile);
-      }, 50);
-    });
+    try {
+      const response = await apiClient.post<ApiResponse<{ user: UserProfile; token?: string }>>('/auth/register', data);
+      if (response.data?.token) {
+        localStorage.setItem('auth_token', response.data.token);
+      }
+      return response.data.user;
+    } catch {
+      return UsersService.register(data);
+    }
   }
 
   /**
-   * Log in a user
+   * Log in a user via API V2
    */
   static async login(emailOrPhone: string, password?: string): Promise<UserProfile> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const profile = UsersService.login(emailOrPhone, password);
-        resolve(profile);
-      }, 50);
-    });
+    try {
+      const response = await apiClient.post<ApiResponse<{ user: UserProfile; token?: string }>>('/auth/login', {
+        email: emailOrPhone,
+        password: password || 'password',
+      });
+      if (response.data?.token) {
+        localStorage.setItem('auth_token', response.data.token);
+      }
+      return response.data.user;
+    } catch {
+      return UsersService.login(emailOrPhone, password);
+    }
   }
 
   /**
-   * Log out current user
+   * Log out current user via API V2
    */
   static async logout(): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        UsersService.logout();
-        resolve();
-      }, 30);
-    });
+    try {
+      await apiClient.post('/auth/logout');
+    } catch {
+      // Ignored
+    } finally {
+      localStorage.removeItem('auth_token');
+      UsersService.logout();
+    }
   }
 
   /**
    * Get current authenticated user profile
    */
   static async getCurrentUser(): Promise<UserProfile | null> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const isLoggedIn = UsersService.isLoggedIn();
-        if (!isLoggedIn) {
-          resolve(null);
-        } else {
-          resolve(UsersService.getProfile());
-        }
-      }, 30);
-    });
+    try {
+      const response = await apiClient.get<ApiResponse<UserProfile>>('/auth/me');
+      return response.data;
+    } catch {
+      const isLoggedIn = UsersService.isLoggedIn();
+      return isLoggedIn ? UsersService.getProfile() : null;
+    }
   }
 
   /**
@@ -86,23 +95,13 @@ export class AuthService {
    * Verify email
    */
   static async verifyEmail(): Promise<UserProfile> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const profile = UsersService.verifyEmail();
-        resolve(profile);
-      }, 50);
-    });
+    return UsersService.verifyEmail();
   }
 
   /**
    * Verify phone number
    */
   static async verifyPhone(): Promise<UserProfile> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const profile = UsersService.verifyPhone();
-        resolve(profile);
-      }, 50);
-    });
+    return UsersService.verifyPhone();
   }
 }

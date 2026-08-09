@@ -34,7 +34,7 @@ export class ApiError extends Error {
 }
 
 const metaEnv = (import.meta as any).env || {};
-const BASE_URL = (metaEnv.VITE_API_URL || metaEnv.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api') as string;
+const BASE_URL = (metaEnv.VITE_API_URL || metaEnv.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v2') as string;
 
 export class ApiClient {
   private getHeaders(): HeadersInit {

@@ -21,6 +21,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!UsersService.isLoggedIn()) {
+      const currentUrl = window.location.pathname + window.location.search;
+      navigateTo(`/login?redirect=${encodeURIComponent(currentUrl)}`);
+      return;
+    }
     UsersService.toggleFavorite(ad.id);
     setIsFavorited(!isFavorited);
     if (onFavoriteToggle) {
@@ -103,7 +108,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
             </h3>
             <span className="text-xs text-slate-400 font-mono font-medium flex items-center gap-1">
               <Eye className="w-3.5 h-3.5" />
-              {ad.viewsCount}
+              {ad.viewsCount ?? (ad as any).view_count ?? (ad as any).viewCount ?? 0}
             </span>
           </div>
 
@@ -121,22 +126,22 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
           <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-500 font-mono text-center">
             <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
               <span className="block text-slate-400 text-[9px] uppercase font-bold">Body Type</span>
-              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes.bodyType}</span>
+              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes?.bodyType || 'Slim'}</span>
             </div>
             <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
               <span className="block text-slate-400 text-[9px] uppercase font-bold">Hair</span>
-              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes.hairColor}</span>
+              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes?.hairColor || 'Dark'}</span>
             </div>
             <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
               <span className="block text-slate-400 text-[9px] uppercase font-bold">Origins</span>
-              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes.nationality}</span>
+              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes?.nationality || 'Indian'}</span>
             </div>
           </div>
         </div>
 
         {/* Bottom footer bar */}
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-          <span>Posted {ad.postedAt}</span>
+          <span>Posted {ad.postedAt || (ad as any).published_at ? new Date((ad as any).published_at).toLocaleDateString() : 'Recently'}</span>
           <span className="font-semibold text-indigo-600 group-hover:underline flex items-center gap-0.5">
             View Profile
             <ArrowUpRight className="w-3 h-3" />
