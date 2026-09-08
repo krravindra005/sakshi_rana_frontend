@@ -1,29 +1,15 @@
-import { Report } from '../types/ad';
+import { apiClient, ApiResponse } from '../lib/api/client';
 
 export class ReportsService {
   /**
-   * Submit an abuse/content report for an ad
+   * Submit an ad report via POST /api/v2/ads/{ad}/reports
    */
-  static async submitReport(adId: string, reason: string, description?: string): Promise<{ success: boolean; message: string; data: Report }> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const report: Report = {
-          id: `rep-${Date.now()}`,
-          adId,
-          reason,
-          description,
-          status: 'pending',
-          createdAt: new Date().toISOString()
-        };
-
-        console.log('Report submitted successfully to Trust & Safety Desk:', report);
-
-        resolve({
-          success: true,
-          message: 'Report submitted. Thank you for keeping our marketplace safe.',
-          data: report
-        });
-      }, 100);
+  static async submitReport(adSlugOrId: string, reasonCode: string, description?: string): Promise<any> {
+    const response = await apiClient.post<ApiResponse<any>>(`/ads/${adSlugOrId}/reports`, {
+      ad_id: adSlugOrId,
+      reason_code: reasonCode,
+      description: description || '',
     });
+    return response.data;
   }
 }

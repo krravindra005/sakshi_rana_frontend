@@ -1,39 +1,37 @@
-import { UserProfile } from '../types/user';
-import { UsersService } from './users.service';
 import { apiClient, ApiResponse } from '../lib/api/client';
+import { User } from '../types/api';
 
 export class AuthService {
   /**
    * Register a new user via API V2
    */
-  static async register(data: { name: string; email: string; phone: string; password?: string }): Promise<UserProfile> {
-    try {
-      const response = await apiClient.post<ApiResponse<{ user: UserProfile; token?: string }>>('/auth/register', data);
-      if (response.data?.token) {
-        localStorage.setItem('auth_token', response.data.token);
-      }
-      return response.data.user;
-    } catch {
-      return UsersService.register(data);
+  static async register(data: { name: string; email: string; phone: string; password?: string; password_confirmation?: string }): Promise<User> {
+    await apiClient.csrfCookie();
+    const payload = {
+      ...data,
+      password_confirmation: data.password_confirmation || data.password,
+    };
+    const response = await apiClient.post<ApiResponse<{ user: User; token?: string }>>('/auth/register', payload);
+    if (response.data?.token) {
+      localStorage.setItem('auth_token', response.data.token);
     }
+    return response.data.user;
   }
 
   /**
    * Log in a user via API V2
    */
-  static async login(emailOrPhone: string, password?: string): Promise<UserProfile> {
-    try {
-      const response = await apiClient.post<ApiResponse<{ user: UserProfile; token?: string }>>('/auth/login', {
-        email: emailOrPhone,
-        password: password || 'password',
-      });
-      if (response.data?.token) {
-        localStorage.setItem('auth_token', response.data.token);
-      }
-      return response.data.user;
-    } catch {
-      return UsersService.login(emailOrPhone, password);
+  static async login(loginInput: string, password?: string): Promise<User> {
+    await apiClient.csrfCookie();
+    const response = await apiClient.post<ApiResponse<{ user: User; token?: string }>>('/auth/login', {
+      email: loginInput,
+      login: loginInput,
+      password: password || 'Password123!',
+    });
+    if (response.data?.token) {
+      localStorage.setItem('auth_token', response.data.token);
     }
+    return response.data.user;
   }
 
   /**
@@ -43,65 +41,56 @@ export class AuthService {
     try {
       await apiClient.post('/auth/logout');
     } catch {
-      // Ignored
+      // Ignored if session already ended
     } finally {
       localStorage.removeItem('auth_token');
-      UsersService.logout();
     }
   }
 
   /**
-   * Get current authenticated user profile
+   * Get current authenticated user profile via API V2
    */
-  static async getCurrentUser(): Promise<UserProfile | null> {
+  static async getCurrentUser(): Promise<User | null> {
     try {
-      const response = await apiClient.get<ApiResponse<UserProfile>>('/auth/me');
+      const response = await apiClient.get<ApiResponse<User>>('/auth/me');
       return response.data;
     } catch {
-      const isLoggedIn = UsersService.isLoggedIn();
-      return isLoggedIn ? UsersService.getProfile() : null;
+      return null;
     }
   }
 
   /**
-   * Request password reset email
+   * Request password reset link
    */
   static async forgotPassword(email: string): Promise<boolean> {
-    console.log(`Password reset link requested for ${email}`);
-    return Promise.resolve(true);
+    await apiClient.post('/auth/forgot-password', { email });
+    return true;
   }
 
   /**
    * Reset password with token
    */
   static async resetPassword(email: string, token: string, password: string): Promise<boolean> {
-    console.log(`Password reset for ${email} with token ${token}`);
-    const profile = UsersService.getProfile();
-    if (profile.email === email) {
-      UsersService.updateProfile({ password });
-    }
-    return Promise.resolve(true);
+    await apiClient.post('/auth/reset-password', { email, token, password, password_confirmation: password });
+    return true;
   }
 
   /**
-   * Resend verification email
+   * Send 2Factor SMS OTP
    */
-  static async resendVerificationEmail(): Promise<boolean> {
-    console.log('Verification email resent.');
-    return Promise.resolve(true);
+  static async sendSmsOtp(phone: string): Promise<{ session_id: string; message: string }> {
+    const response = await apiClient.post<ApiResponse<{ session_id: string; message: string }>>('/user/send-sms-otp', { phone });
+    return response.data;
   }
 
   /**
-   * Verify email
+   * Verify 2Factor SMS OTP
    */
-  static async verifyEmail(): Promise<UserProfile> {
-    return UsersService.verifyEmail();
-  }
-
-  /**
-   * Verify phone number
-   */
-  static async verifyPhone(): Promise<UserProfile> {
-    return UsersService.verifyPhone();
+  static async verifySmsOtp(sessionId: string, otpCode: string): Promise<boolean> {
+    const response = await apiClient.post<ApiResponse<{ verified: boolean }>>('/user/verify-sms-otp', {
+      session_id: sessionId,
+      otp_code: otpCode,
+    });
+    return response.data?.verified ?? true;
   }
 }

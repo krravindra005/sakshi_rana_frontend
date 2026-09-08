@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
 import { SearchService } from '../../services/search.service';
+import { CategoriesService } from '../../services/categories.service';
+import { LocationsService } from '../../services/locations.service';
 import { mockFilterConfig } from '../../data/mock-filters';
-import { mockCategories } from '../../data/mock-categories';
-import { mockCities, mockAreas } from '../../data/mock-locations';
 import { FilterOptions } from '../../types/filter';
 import { 
   X, 
@@ -73,9 +73,25 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
     });
   };
 
-  // Get areas of the active city to dynamically show them
-  const currentCityObj = mockCities.find((c) => c.slug === route.city);
-  const availableAreas = currentCityObj ? mockAreas.filter((a) => a.cityId === currentCityObj.id) : [];
+  // Fetch categories, cities, and areas dynamically from API
+  const [categories, setCategories] = useState<any[]>([]);
+  const [availableAreas, setAvailableAreas] = useState<any[]>([]);
+  const [currentCityName, setCurrentCityName] = useState<string>('');
+
+  useEffect(() => {
+    CategoriesService.getAll().then(setCategories).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (route.city) {
+      LocationsService.getCityBySlug(route.city).then((c) => {
+        if (c) {
+          setCurrentCityName(c.name);
+          LocationsService.getAreasByCity(c.id).then(setAvailableAreas).catch(() => {});
+        }
+      });
+    }
+  }, [route.city]);
 
   return (
     <div className="space-y-6">
@@ -128,7 +144,7 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
           className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
         >
           <option value="">All Categories</option>
-          {mockCategories.map((cat) => (
+          {categories.map((cat) => (
             <option key={cat.id} value={cat.slug}>
               {cat.name}
             </option>
@@ -141,7 +157,7 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
         <div className="space-y-2">
           <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-slate-500" />
-            Specific Area in {currentCityObj?.name}
+            Specific Area in {currentCityName || 'City'}
           </label>
           <select
             id="filter-area"

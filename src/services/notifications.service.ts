@@ -1,47 +1,40 @@
-import { Notification } from '../types/user';
-import { apiClient, ApiResponse } from '../lib/api/client';
+import { apiClient, ApiResponse, ApiPaginatedResponse } from '../lib/api/client';
+import { NotificationItem } from '../types/api';
 
 export class NotificationsService {
-  private static storageKey = 'marketplace_user_notifications';
-
   /**
-   * Fetch all notifications for current user from API V2
+   * Fetch all notifications for current user from GET /api/v2/notifications
    */
-  static async getAll(): Promise<Notification[]> {
+  static async getAll(): Promise<NotificationItem[]> {
     try {
-      const response = await apiClient.get<ApiResponse<Notification[]>>('/notifications');
-      if (response.data && response.data.length > 0) return response.data;
+      const response = await apiClient.get<ApiPaginatedResponse<NotificationItem>>('/notifications');
+      return response.data || [];
     } catch {
-      // Fallback
+      return [];
     }
-
-    const stored = localStorage.getItem(this.storageKey);
-    return stored ? JSON.parse(stored) : [];
   }
 
   /**
-   * Mark notification as read via API V2
+   * Mark single notification as read via POST /api/v2/notifications/{id}/read
    */
-  static async markAsRead(id: string): Promise<Notification[]> {
+  static async markAsRead(id: string | number): Promise<boolean> {
     try {
       await apiClient.post(`/notifications/${id}/read`);
+      return true;
     } catch {
-      // Ignored
+      return false;
     }
-
-    const notifications = await this.getAll();
-    const updated = notifications.map((n) => n.id === id ? { ...n, isRead: true } : n);
-    localStorage.setItem(this.storageKey, JSON.stringify(updated));
-    return updated;
   }
 
   /**
-   * Mark all notifications as read
+   * Mark all notifications as read via POST /api/v2/notifications/read-all
    */
-  static async markAllAsRead(): Promise<Notification[]> {
-    const notifications = await this.getAll();
-    const updated = notifications.map((n) => ({ ...n, isRead: true }));
-    localStorage.setItem(this.storageKey, JSON.stringify(updated));
-    return updated;
+  static async markAllAsRead(): Promise<boolean> {
+    try {
+      await apiClient.post('/notifications/read-all');
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

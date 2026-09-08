@@ -1,17 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
-import { mockCategories } from '../../data/mock-categories';
+import { CategoriesService } from '../../services/categories.service';
+import { Category } from '../../types/api';
 import { Grid } from 'lucide-react';
 
 export const CategorySelect: React.FC = () => {
   const { draftState, setDraftState } = useAdvancedSearch();
+  const [categories, setCategories] = useState<Category[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    CategoriesService.getAll().then((data) => {
+      if (mounted) setCategories(data);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const categoryVal = e.target.value;
     setDraftState(prev => ({
       ...prev,
       category: categoryVal || undefined,
-      // When category changes, reset category-specific filters to prevent lingering mismatch values
       nationality: undefined,
       ethnicity: undefined,
       bodyType: undefined,
@@ -38,7 +47,7 @@ export const CategorySelect: React.FC = () => {
           className="w-full pl-11 pr-10 py-3 text-sm text-slate-700 bg-transparent border-0 focus:outline-none focus:ring-0 appearance-none cursor-pointer font-medium"
         >
           <option value="">All Categories</option>
-          {mockCategories.map((cat) => (
+          {categories.map((cat) => (
             <option key={cat.id} value={cat.slug}>
               {cat.name}
             </option>

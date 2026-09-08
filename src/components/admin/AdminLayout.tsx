@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useRouter } from '../../context/RouterContext';
+import { UsersService } from '../../services/users.service';
 import { 
   Sparkles, 
   LayoutDashboard, 
@@ -30,6 +31,7 @@ interface SidebarItem {
   name: string;
   icon: any;
   roles: AdminRole[];
+  permissions: string[];
   badge?: number;
 }
 
@@ -50,61 +52,67 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
-  // Define sidebar menu options grouped by domain
+  const currentUser = UsersService.getProfile();
+  const userPermissions = currentUser.permissions || [];
+  const userRoles = currentUser.roles || (currentUser.role ? [currentUser.role] : []);
+
+  // Define sidebar menu options grouped by domain with permission guards
   const menuGroups: SidebarGroup[] = [
     {
       title: 'DASHBOARD',
       items: [
-        { id: 'dashboard', name: 'Overview', icon: LayoutDashboard, roles: ['Super Admin', 'Admin', 'Moderator', 'Finance', 'Support'] }
+        { id: 'dashboard', name: 'Overview', icon: LayoutDashboard, roles: ['Super Admin', 'Admin', 'Moderator', 'Finance', 'Support'], permissions: ['dashboard.view'] }
       ]
     },
     {
       title: 'MARKETPLACE',
       items: [
-        { id: 'ads', name: 'Advertisements', icon: FileText, roles: ['Super Admin', 'Admin', 'Moderator'], badge: 3 },
-        { id: 'moderation', name: 'Moderation Queue', icon: ShieldCheck, roles: ['Super Admin', 'Admin', 'Moderator'], badge: 2 },
-        { id: 'reports', name: 'Reports & Abuse', icon: ShieldAlert, roles: ['Super Admin', 'Admin', 'Moderator', 'Support'], badge: 1 }
+        { id: 'ads', name: 'Advertisements', icon: FileText, roles: ['Super Admin', 'Admin', 'Moderator'], permissions: ['ads.moderate', 'ads.view'] },
+        { id: 'moderation', name: 'Moderation Queue', icon: ShieldCheck, roles: ['Super Admin', 'Admin', 'Moderator'], permissions: ['moderation.view'] },
+        { id: 'reports', name: 'Reports & Abuse', icon: ShieldAlert, roles: ['Super Admin', 'Admin', 'Moderator', 'Support'], permissions: ['reports.view'] }
       ]
     },
     {
       title: 'USERS',
       items: [
-        { id: 'users', name: 'User Directory', icon: Users, roles: ['Super Admin', 'Admin', 'Support'] }
+        { id: 'users', name: 'User Directory', icon: Users, roles: ['Super Admin', 'Admin', 'Support'], permissions: ['users.view'] }
       ]
     },
     {
       title: 'CONFIGURATION',
       items: [
-        { id: 'categories', name: 'Categories & Filters', icon: FolderTree, roles: ['Super Admin', 'Admin'] }
+        { id: 'categories', name: 'Categories & Filters', icon: FolderTree, roles: ['Super Admin', 'Admin'], permissions: ['categories.view', 'categories.manage'] }
       ]
     },
     {
       title: 'BUSINESS & FINANCE',
       items: [
-        { id: 'promotions', name: 'Promotions Catalog', icon: Sparkles, roles: ['Super Admin', 'Admin', 'Finance'] },
-        { id: 'payments', name: 'Fiat Payments', icon: DollarSign, roles: ['Super Admin', 'Admin', 'Finance'] },
-        { id: 'wallet', name: 'Wallet Ledger', icon: Coins, roles: ['Super Admin', 'Admin', 'Finance'] }
+        { id: 'promotions', name: 'Promotions Catalog', icon: Sparkles, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['promotions.view', 'promotions.manage'] },
+        { id: 'payments', name: 'Fiat Payments', icon: DollarSign, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['payments.view'] },
+        { id: 'wallet', name: 'Wallet Ledger', icon: Coins, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['wallet.view', 'wallet.transactions'] }
       ]
     },
     {
       title: 'CONTENT',
       items: [
-        { id: 'seo', name: 'SEO Management', icon: Globe, roles: ['Super Admin', 'Admin'] }
+        { id: 'seo', name: 'SEO Management', icon: Globe, roles: ['Super Admin', 'Admin'], permissions: ['seo.view', 'seo.manage'] }
       ]
     },
     {
       title: 'SYSTEM',
       items: [
-        { id: 'settings', name: 'Global Settings', icon: Settings, roles: ['Super Admin', 'Admin'] },
-        { id: 'audit', name: 'Security Audit Logs', icon: Layers, roles: ['Super Admin', 'Admin'] }
+        { id: 'settings', name: 'Global Settings', icon: Settings, roles: ['Super Admin', 'Admin'], permissions: ['settings.view', 'settings.manage'] },
+        { id: 'audit', name: 'Security Audit Logs', icon: Layers, roles: ['Super Admin', 'Admin'], permissions: ['audit_logs.view'] }
       ]
     }
   ];
 
   const rolesList: AdminRole[] = ['Super Admin', 'Admin', 'Moderator', 'Finance', 'Support'];
 
-  const hasAccess = (itemRoles: AdminRole[]) => {
-    return itemRoles.includes(activeRole);
+  const hasAccess = (itemPermissions: string[], itemRoles: AdminRole[]) => {
+    if (userRoles.includes('super_admin') || userRoles.includes('Super Admin')) return true;
+    if (itemRoles.includes(activeRole)) return true;
+    return itemPermissions.some(p => userPermissions.includes(p));
   };
 
   const currentTab = route.subPath || 'dashboard';
@@ -174,7 +182,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
           {/* Navigation Items List */}
           <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
             {menuGroups.map((group, gIdx) => {
-              const visibleItems = group.items.filter(item => hasAccess(item.roles));
+              const visibleItems = group.items.filter(item => hasAccess(item.permissions, item.roles));
               if (visibleItems.length === 0) return null;
 
               return (
@@ -269,7 +277,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
 
               <div className="flex-1 overflow-y-auto p-4 space-y-6">
                 {menuGroups.map((group, gIdx) => {
-                  const visibleItems = group.items.filter(item => hasAccess(item.roles));
+                  const visibleItems = group.items.filter(item => hasAccess(item.permissions, item.roles));
                   if (visibleItems.length === 0) return null;
 
                   return (

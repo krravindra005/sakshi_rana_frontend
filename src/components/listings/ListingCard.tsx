@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { Ad } from '../../types/ad';
 import { UsersService } from '../../services/users.service';
-import { mockCategories } from '../../data/mock-categories';
+import { FavoritesService } from '../../services/favorites.service';
 import { ShieldCheck, Heart, Eye, ArrowUpRight, Award, MapPin } from 'lucide-react';
 
 interface ListingCardProps {
@@ -15,26 +15,30 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
   const [isFavorited, setIsFavorited] = useState(false);
 
   useEffect(() => {
-    const favorites = UsersService.getFavorites();
-    setIsFavorited(favorites.includes(ad.id));
+    if (UsersService.isLoggedIn()) {
+      FavoritesService.isFavorite(ad.id).then(setIsFavorited).catch(() => {});
+    } else {
+      const favorites = UsersService.getFavorites();
+      setIsFavorited(favorites.includes(ad.id));
+    }
   }, [ad.id]);
 
-  const handleFavoriteClick = (e: React.MouseEvent) => {
+  const handleFavoriteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!UsersService.isLoggedIn()) {
       const currentUrl = window.location.pathname + window.location.search;
       navigateTo(`/login?redirect=${encodeURIComponent(currentUrl)}`);
       return;
     }
-    UsersService.toggleFavorite(ad.id);
-    setIsFavorited(!isFavorited);
+    const newStatus = await FavoritesService.toggle(ad.id);
+    setIsFavorited(newStatus);
     if (onFavoriteToggle) {
       onFavoriteToggle(ad.id);
     }
   };
 
   const getCategoryName = (slug: string) => {
-    return mockCategories.find((c) => c.slug === slug)?.name || slug;
+    return slug ? slug.replace(/-/g, ' ').toUpperCase() : 'CLASSIFIED';
   };
 
   return (

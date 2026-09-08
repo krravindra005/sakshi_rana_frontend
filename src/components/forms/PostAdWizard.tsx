@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
-import { mockCategories } from '../../data/mock-categories';
-import { mockCities, mockAreas } from '../../data/mock-locations';
+import { CategoriesService } from '../../services/categories.service';
+import { LocationsService } from '../../services/locations.service';
 import { mockFilterConfig } from '../../data/mock-filters';
 import { AdsService } from '../../services/ads.service';
 import { UsersService } from '../../services/users.service';
@@ -66,7 +66,7 @@ export const PostAdWizard: React.FC = () => {
   const [whatsapp, setWhatsapp] = useState('');
   const [email, setEmail] = useState('');
 
-  // Image Upload State (mock urls for the prototype)
+  // Image Upload State
   const [images, setImages] = useState<string[]>([
     'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=400',
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400'
@@ -76,6 +76,36 @@ export const PostAdWizard: React.FC = () => {
   // Status/Validation states
   const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // API State
+  const [categoriesList, setCategoriesList] = useState<any[]>([]);
+  const [citiesList, setCitiesList] = useState<any[]>([]);
+  const [areasList, setAreasList] = useState<any[]>([]);
+
+  useEffect(() => {
+    CategoriesService.getAll().then((data) => {
+      setCategoriesList(data);
+      if (data.length > 0 && !category) {
+        setCategory(data[0].slug);
+      }
+    }).catch(() => {});
+
+    LocationsService.getCities().then((data) => {
+      setCitiesList(data);
+      if (data.length > 0 && !city) {
+        setCity(data[0].slug);
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (city) {
+      const selectedCityObj = citiesList.find((c) => c.slug === city || c.id === city);
+      if (selectedCityObj) {
+        LocationsService.getAreasByCity(selectedCityObj.id).then(setAreasList).catch(() => setAreasList([]));
+      }
+    }
+  }, [city, citiesList]);
 
   // 1. Check for stored draft on component load
   useEffect(() => {
@@ -107,7 +137,7 @@ export const PostAdWizard: React.FC = () => {
       setCategory(draft.category || '');
       setCountry(draft.country || 'India');
       setState(draft.state || 'Delhi NCR');
-      setCity(draft.city || 'delhi');
+      setCity(draft.city || '');
       setArea(draft.area || '');
       setTitle(draft.title || '');
       setDescription(draft.description || '');
@@ -133,83 +163,72 @@ export const PostAdWizard: React.FC = () => {
     setDraftBannerVisible(false);
   };
 
-  // Drag and drop mock file additions
-  const handleMockImageUpload = () => {
-    const list = [
-      'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&q=80&w=400',
-      'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400',
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=400'
-    ];
-    // Add random one
-    const randomImg = list[Math.floor(Math.random() * list.length)];
-    setImages([...images, randomImg]);
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return;
+    const fileList: File[] = Array.from(e.target.files);
+    fileList.forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setImages((prev) => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleDeleteImage = (index: number) => {
     setImages(images.filter((_, idx) => idx !== index));
     if (coverImageIdx === index) {
       setCoverImageIdx(0);
-    } else if (coverImageIdx > index) {
-      setCoverImageIdx(coverImageIdx - 1);
     }
   };
 
-  // Validate step progress
-  const validateStep = (): boolean => {
+  const handleNextStep = () => {
     setValidationError('');
     
     if (currentStep === 1 && !category) {
-      setValidationError('Please choose a category to continue.');
-      return false;
+      setValidationError('Please select a category.');
+      return;
     }
-    if (currentStep === 2 && (!city || !area)) {
-      setValidationError('Please select a valid city and area.');
-      return false;
+    if (currentStep === 2 && !city) {
+      setValidationError('Please select a city hub.');
+      return;
     }
     if (currentStep === 3) {
-      if (title.length < 10) {
-        setValidationError('Your advertisement title must be at least 10 characters.');
-        return false;
+      if (!title.trim() || title.length < 5) {
+        setValidationError('Please write a descriptive title heading (min 5 characters).');
+        return;
       }
-      if (description.length < 50) {
-        setValidationError('Please provide a detailed description of at least 50 characters.');
-        return false;
+      if (!description.trim() || description.length < 20) {
+        setValidationError('Please enter a bio description (min 20 characters).');
+        return;
       }
     }
-    if (currentStep === 5 && selectedServices.length === 0) {
-      setValidationError('Please select at least one companion service.');
-      return false;
-    }
-    if (currentStep === 6 && selectedPlaces.length === 0) {
-      setValidationError('Please specify at least one place of service.');
-      return false;
-    }
-    if (currentStep === 7 && (!phone || !whatsapp)) {
-      setValidationError('Please provide both Phone and WhatsApp contact details.');
-      return false;
-    }
-    if (currentStep === 8 && images.length === 0) {
-      setValidationError('Please upload at least one profile photo to verify your listing.');
-      return false;
+    if (currentStep === 7 && (!phone.trim() || phone.length < 8)) {
+      setValidationError('Please provide a valid contact phone number.');
+      return;
     }
 
-    return true;
-  };
-
-  const handleNext = () => {
-    if (validateStep()) {
-      setCurrentStep((prev) => Math.min(prev + 1, 10));
+    if (currentStep < 10) {
+      setCurrentStep(currentStep + 1);
     }
   };
 
-  const handlePrev = () => {
+  const handlePrevStep = () => {
     setValidationError('');
-    setCurrentStep((prev) => Math.max(prev - 1, 15));
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
   };
 
   const handleSubmitAd = async () => {
     setIsSubmitting(true);
     
+    const selectedCityObj = citiesList.find((c) => c.slug === city || c.id === city);
+    const selectedAreaObj = areasList.find((a) => a.slug === area || a.id === area);
+    const selectedCategoryObj = categoriesList.find((cat) => cat.slug === category);
+
     const adAttributes: AdAttributes = {
       nationality,
       ethnicity,
@@ -219,71 +238,79 @@ export const PostAdWizard: React.FC = () => {
       placeOfService: selectedPlaces
     };
 
-    // Construct mock Ad
-    const finalAd: Omit<Ad, 'id' | 'postedAt' | 'viewsCount'> = {
-      slug: `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${city}`,
+    const finalAdPayload: any = {
       title,
       description,
-      categorySlug: category,
-      citySlug: city,
-      areaSlug: area,
-      profileName: title.split(' ')[0] || 'Aria', // default mock name
-      profileImage: images[coverImageIdx] || images[0],
-      images: images,
-      isVerified: false, // published ads go to Pending Review
-      isFeatured: false,
-      attributes: adAttributes,
-      services: selectedServices,
+      category_id: selectedCategoryObj?.id || 1,
+      city_id: selectedCityObj?.id || 1,
+      area_id: selectedAreaObj?.id || null,
+      price: 1500,
       contact: {
         phone,
-        whatsapp,
-        email: email || undefined
-      }
+        whatsapp: whatsapp || phone,
+        email: email || 'contact@example.com'
+      },
+      attributes: adAttributes,
+      services: selectedServices,
+      images,
     };
 
     try {
-      // Create listing in AdsService
-      const created = await AdsService.createAd(finalAd);
+      await AdsService.createAd(finalAdPayload);
       UsersService.clearDraftAd();
       
-      setTimeout(() => {
-        setIsSubmitting(false);
-        // Navigate directly to dashboard publications
-        navigateTo('/dashboard', { tab: 'ads' });
-        alert('Your advertisement was submitted successfully! It is now pending verification by our moderation team.');
-      }, 1500);
-
-    } catch (err) {
+      setIsSubmitting(false);
+      navigateTo('/dashboard', { tab: 'ads' });
+    } catch (err: any) {
       console.error(err);
-      setValidationError('Failed to save advertisement. Try again.');
+      setValidationError(err?.response?.data?.message || 'Failed to save advertisement. Please check form input.');
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="bg-[#fcfcfd] min-h-screen py-10">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6">
+    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
         
-        {/* RESTORE DRAFT BANNER */}
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold font-mono uppercase tracking-wider mb-1">
+              <Sparkles className="w-4 h-4" />
+              Publisher Dashboard
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Post Classified Listing
+            </h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigateTo('/dashboard')}
+            className="text-xs font-bold text-slate-500 hover:text-slate-900 border border-slate-200 bg-white px-3.5 py-2 rounded-xl transition shadow-sm self-start sm:self-auto"
+          >
+            Cancel & Exit
+          </button>
+        </div>
+
         {draftBannerVisible && (
-          <div className="mb-8 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in slide-in-from-top duration-300">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-bold text-slate-900 text-sm">Unfinished Advertisement Draft Found</h4>
-                <p className="text-slate-500 text-xs mt-0.5">We autosaved your progress. Would you like to restore your listing data?</p>
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 animate-in fade-in duration-300">
+            <div className="flex items-center gap-2.5">
+              <Info className="w-5 h-5 text-amber-600 shrink-0" />
+              <div className="text-xs font-medium">
+                <span className="font-bold">Unsaved draft detected!</span> Would you like to restore your previous publication details?
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
               <button
+                type="button"
                 onClick={handleRestoreDraft}
-                className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold text-xs py-1.5 px-3 rounded-lg transition"
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
               >
                 Restore Draft
               </button>
               <button
+                type="button"
                 onClick={handleDiscardDraft}
-                className="bg-white hover:bg-slate-50 text-slate-500 font-semibold text-xs py-1.5 px-3 rounded-lg border border-slate-200 transition"
+                className="px-3 py-1.5 bg-white border border-amber-200 text-amber-800 hover:bg-amber-100/50 rounded-lg text-xs font-semibold transition"
               >
                 Discard
               </button>
@@ -291,184 +318,83 @@ export const PostAdWizard: React.FC = () => {
           </div>
         )}
 
-        {/* Wizard Main Panel */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-xl overflow-hidden grid grid-cols-1 md:grid-cols-4">
-          
-          {/* STEP INDICATORS SIDEBAR */}
-          <div className="bg-slate-900 text-slate-400 p-6 space-y-6 md:border-r border-slate-800">
-            <div className="pb-4 border-b border-slate-800">
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-widest font-mono">AD PUBLISHER</span>
-              <h3 className="text-white font-bold text-base mt-1">Creation Wizard</h3>
-            </div>
-            
-            <ul className="space-y-4 text-xs font-medium">
-              {steps.map((st) => (
-                <li 
-                  key={st.num} 
-                  className={`flex items-center gap-3 transition ${
-                    currentStep === st.num 
-                      ? 'text-white' 
-                      : currentStep > st.num 
-                        ? 'text-indigo-400' 
-                        : 'text-slate-500'
-                  }`}
-                >
-                  <span className={`w-5.5 h-5.5 rounded-full flex items-center justify-center font-bold text-[10px] border ${
-                    currentStep === st.num 
-                      ? 'bg-indigo-600 border-indigo-600 text-white' 
-                      : currentStep > st.num 
-                        ? 'bg-indigo-950/40 border-indigo-500/30 text-indigo-400' 
-                        : 'border-slate-800'
-                  }`}>
-                    {currentStep > st.num ? <Check className="w-3 h-3" /> : st.num}
-                  </span>
-                  <span>{st.name}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* WIZARD CONTENT BOX */}
-          <div className="col-span-1 md:col-span-3 p-6 sm:p-8 flex flex-col justify-between min-h-[520px]">
-            
-            <div className="space-y-6">
+        {/* Wizard Progress Steps Bar */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-8 overflow-x-auto">
+          <div className="flex items-center justify-between min-w-[600px] gap-2">
+            {steps.map((step) => {
+              const isActive = currentStep === step.num;
+              const isCompleted = currentStep > step.num;
               
-              {/* Validation alert banner */}
-              {validationError && (
-                <div className="p-3 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs flex items-center gap-2 font-medium">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <span>{validationError}</span>
+              return (
+                <div key={step.num} className="flex items-center gap-2">
+                  <div 
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition ${
+                      isActive 
+                        ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' 
+                        : isCompleted 
+                        ? 'bg-emerald-500 text-white' 
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
+                  >
+                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.num}
+                  </div>
+                  <span className={`text-xs font-medium whitespace-nowrap ${isActive ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
+                    {step.name}
+                  </span>
+                  {step.num < 10 && <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
                 </div>
-              )}
+              );
+            })}
+          </div>
+        </div>
 
-              {/* STEP 1: CHOOSE CATEGORY */}
-              {currentStep === 1 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">What classified category is your listing?</h2>
-                  <p className="text-slate-500 text-xs">Select the primary service sector. This determines available filter attributes later.</p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    {mockCategories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => setCategory(cat.slug)}
-                        className={`p-4 text-left border rounded-xl transition ${
-                          category === cat.slug 
-                            ? 'bg-indigo-50/50 border-indigo-500 ring-1 ring-indigo-500 text-slate-900 font-bold' 
-                            : 'bg-white border-slate-200/80 hover:bg-slate-50 text-slate-700'
-                        }`}
-                      >
-                        <h4 className="text-sm font-bold flex items-center gap-1.5 capitalize">
-                          <span className={`w-2 h-2 rounded-full ${category === cat.slug ? 'bg-indigo-600 animate-pulse' : 'bg-slate-300'}`} />
-                          {cat.name}
-                        </h4>
-                        <p className="text-slate-400 text-[11px] font-normal leading-relaxed mt-1">
-                          {cat.description.substring(0, 75)}...
-                        </p>
-                      </button>
-                    ))}
+        {/* Wizard Main Card */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="p-6 sm:p-8">
+
+            {/* Validation alert banner */}
+            {validationError && (
+              <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2 animate-pulse">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{validationError}</span>
+              </div>
+            )}
+
+            {/* STEP 3: AD CONTENT */}
+            {currentStep === 3 && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-bold text-slate-900">Advertisement Title & Bio Description</h2>
+                <p className="text-slate-500 text-xs">Write a descriptive, non-provocative, highly elegant introduction for your profile.</p>
+                
+                <div className="space-y-4 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Title Heading</label>
+                    <input 
+                      id="wizard-ad-title-input"
+                      type="text"
+                      placeholder="e.g. Elegant social dinner companion - high class discretion"
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:bg-white transition"
+                    />
+                    <span className="text-[10px] text-slate-400">Min 5 characters. Keep titles clean and descriptive.</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Biography / Description</label>
+                    <textarea 
+                      id="wizard-ad-desc-input"
+                      rows={6}
+                      placeholder="Introduce yourself, specify your service philosophy, communication languages, and other premium guidelines..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:bg-white transition"
+                    />
+                    <span className="text-[10px] text-slate-400">Min 20 characters. Explicit descriptions or solicitations are strictly prohibited.</span>
                   </div>
                 </div>
-              )}
-
-              {/* STEP 2: CHOOSE LOCATION */}
-              {currentStep === 2 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Where are you providing services?</h2>
-                  <p className="text-slate-500 text-xs">Specify country, state, city, and nearest area neighborhood for localization maps.</p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Country</label>
-                      <input 
-                        type="text" 
-                        disabled 
-                        value={country} 
-                        className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg p-2.5 text-slate-500 focus:outline-none" 
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">State</label>
-                      <input 
-                        type="text" 
-                        disabled 
-                        value={state} 
-                        className="w-full text-sm bg-slate-100 border border-slate-200 rounded-lg p-2.5 text-slate-500 focus:outline-none" 
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">City Hub</label>
-                      <select
-                        id="wizard-city-select"
-                        value={city}
-                        onChange={(e) => {
-                          setCity(e.target.value);
-                          setArea('');
-                        }}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
-                      >
-                        {mockCities.map((c) => (
-                          <option key={c.id} value={c.slug}>{c.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Nearest Area Sector</label>
-                      <select
-                        id="wizard-area-select"
-                        value={area}
-                        onChange={(e) => setArea(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
-                      >
-                        <option value="">Select Area</option>
-                        {mockAreas.filter((a) => a.cityId === `ct-${city}`).map((a) => (
-                          <option key={a.id} value={a.slug}>{a.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: AD CONTENT */}
-              {currentStep === 3 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Advertisement Title & Bio Description</h2>
-                  <p className="text-slate-500 text-xs">Write a descriptive, non-provocative, highly elegant introduction for your profile.</p>
-                  
-                  <div className="space-y-4 pt-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Title Heading</label>
-                      <input 
-                        id="wizard-ad-title-input"
-                        type="text"
-                        placeholder="e.g. Elegant social dinner companion - high class discretion"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:bg-white transition"
-                      />
-                      <span className="text-[10px] text-slate-400">Min 10 characters. Keep titles clean and descriptive.</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Biography / Description</label>
-                      <textarea 
-                        id="wizard-ad-desc-input"
-                        rows={6}
-                        placeholder="Introduce yourself, specify your service philosophy, communication languages, and other premium guidelines..."
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:bg-white transition"
-                      />
-                      <span className="text-[10px] text-slate-400">Min 50 characters. Explicit descriptions or solicitations are strictly prohibited.</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+              </div>
+            )}
 
               {/* STEP 4: PROFILE ATTRIBUTES */}
               {currentStep === 4 && (
@@ -677,9 +603,17 @@ export const PostAdWizard: React.FC = () => {
                   <p className="text-slate-500 text-xs">Upload non-explicit portraits or elegant lifestyle shots. Specify which photo serves as the profile cover card.</p>
                   
                   {/* Drag and Drop Zone */}
+                  <input
+                    type="file"
+                    id="wizard-file-input"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
                   <div 
                     id="wizard-dropzone"
-                    onClick={handleMockImageUpload}
+                    onClick={() => document.getElementById('wizard-file-input')?.click()}
                     className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center bg-slate-50 hover:bg-slate-100/50 cursor-pointer transition flex flex-col items-center justify-center gap-3"
                   >
                     <div className="p-3 bg-white border border-slate-100 rounded-full text-slate-400 shadow-sm">
@@ -815,7 +749,7 @@ export const PostAdWizard: React.FC = () => {
               <div>
                 {currentStep > 1 && (
                   <button
-                    onClick={handlePrev}
+                    onClick={handlePrevStep}
                     className="flex items-center gap-1 py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition"
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -829,7 +763,7 @@ export const PostAdWizard: React.FC = () => {
                 {currentStep < 10 ? (
                   <button
                     id="wizard-continue-btn"
-                    onClick={handleNext}
+                    onClick={handleNextStep}
                     className="w-full sm:w-auto flex items-center justify-center gap-1.5 py-2.5 px-6 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition shadow-sm"
                   >
                     <span>Continue</span>
@@ -860,6 +794,5 @@ export const PostAdWizard: React.FC = () => {
 
         </div>
       </div>
-    </div>
   );
 };

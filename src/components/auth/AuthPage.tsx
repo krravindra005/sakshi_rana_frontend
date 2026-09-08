@@ -132,15 +132,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
     }
   };
 
-  // Pre-fill demo credentials
-  const handlePreFillDemo = () => {
-    setLoginId('elena.v@example.com');
-    setLoginPassword('password123');
-    setError(null);
-  };
-
   // Submit Login
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     if (!loginId || !loginPassword) {
@@ -149,40 +142,28 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
     }
 
     setLoading(true);
-    setTimeout(() => {
-      try {
-        const user = UsersService.getProfile();
-        // Allow demo profile or check matching registration
-        if (
-          loginId.toLowerCase() === 'elena.v@example.com' || 
-          loginId === '+91 99999 88888' ||
-          (user && user.email.toLowerCase() === loginId.toLowerCase() && user.isLoggedIn === false)
-        ) {
-          UsersService.login(loginId, loginPassword);
-          setSuccessMsg('Logged in successfully!');
-          
-          // Re-route check
-          setTimeout(() => {
-            if (!UsersService.isFullyVerified()) {
-              setMode('verify_email');
-            } else {
-              navigateTo(getRedirectTarget());
-              if (onClose) onClose();
-            }
-          }, 800);
+    try {
+      await UsersService.login(loginId, loginPassword);
+      setSuccessMsg('Logged in successfully!');
+      
+      // Re-route check
+      setTimeout(() => {
+        if (!UsersService.isFullyVerified()) {
+          setMode('verify_email');
         } else {
-          setError('Invalid login credentials. Use the Demo Login or Sign Up instead.');
+          navigateTo(getRedirectTarget());
+          if (onClose) onClose();
         }
-      } catch (err: any) {
-        setError(err.message || 'Login failed.');
-      } finally {
-        setLoading(false);
-      }
-    }, 600);
+      }, 800);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Submit Registration (Sign Up)
-  const handleSignUpSubmit = (e: React.FormEvent) => {
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -197,29 +178,27 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
     }
 
     setLoading(true);
-    setTimeout(() => {
-      try {
-        const profile = UsersService.register({
-          name,
-          email,
-          phone,
-          password
-        });
-        
-        setRegisteredUser({ email, phone });
-        setSuccessMsg('Account created! Let\'s complete verification.');
-        
-        // Advance to step 1: Email Verification
-        setTimeout(() => {
-          setMode('verify_email');
-          setSuccessMsg(null);
-        }, 1000);
-      } catch (err: any) {
-        setError(err.message || 'Registration failed.');
-      } finally {
-        setLoading(false);
-      }
-    }, 800);
+    try {
+      await UsersService.register({
+        name,
+        email,
+        phone,
+        password
+      });
+      
+      setRegisteredUser({ email, phone });
+      setSuccessMsg('Account created! Let\'s complete verification.');
+      
+      // Advance to step 1: Email Verification
+      setTimeout(() => {
+        setMode('verify_email');
+        setSuccessMsg(null);
+      }, 1000);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Resend functions
@@ -373,16 +352,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
           {mode === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               
-              {/* Quick Demo Pre-Fill Trigger */}
-              <button
-                type="button"
-                onClick={handlePreFillDemo}
-                className="w-full py-2 px-3 border border-indigo-100 bg-indigo-50/50 hover:bg-indigo-50 rounded-xl text-indigo-700 text-xs font-semibold flex items-center justify-center gap-2 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Pre-fill Elena Vance Demo Account</span>
-              </button>
-
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                   Email or Registered Phone
@@ -394,7 +363,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   <input
                     id="login-id"
                     type="text"
-                    placeholder="elena.v@example.com"
+                    placeholder="Enter email or phone number"
                     value={loginId}
                     onChange={(e) => setLoginId(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"
@@ -471,7 +440,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                     id="signup-name"
                     type="text"
                     required
-                    placeholder="Elena Vance"
+                    placeholder="Enter your full name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"
@@ -491,7 +460,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                     id="signup-email"
                     type="email"
                     required
-                    placeholder="elena.v@example.com"
+                    placeholder="you@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"

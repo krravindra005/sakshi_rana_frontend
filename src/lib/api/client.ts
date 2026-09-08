@@ -2,10 +2,12 @@ export interface ApiResponse<T> {
   success: boolean;
   message?: string;
   data: T;
+  request_id?: string;
 }
 
 export interface ApiPaginatedResponse<T> {
   success: boolean;
+  message?: string;
   data: T[];
   meta: {
     current_page: number;
@@ -13,38 +15,52 @@ export interface ApiPaginatedResponse<T> {
     per_page: number;
     total: number;
   };
+  request_id?: string;
 }
 
 export interface ApiValidationError {
   success: boolean;
   message: string;
   errors: Record<string, string[]>;
+  request_id?: string;
 }
 
 export class ApiError extends Error {
   status: number;
   errors?: Record<string, string[]>;
+  request_id?: string;
 
-  constructor(message: string, status: number, errors?: Record<string, string[]>) {
+  constructor(message: string, status: number, errors?: Record<string, string[]>, requestId?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.errors = errors;
+    this.request_id = requestId;
   }
 }
 
 const metaEnv = (import.meta as any).env || {};
 const BASE_URL = (metaEnv.VITE_API_URL || metaEnv.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v2') as string;
+const SANCTUM_URL = (metaEnv.VITE_SANCTUM_URL || 'http://localhost:8000') as string;
 
 export class ApiClient {
-  private getHeaders(): HeadersInit {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+  private getHeaders(isFormData = false): HeadersInit {
+    const headers: Record<string, string> = {
       'Accept': 'application/json',
     };
 
-    // Authentication token placeholder
-    const token = localStorage.getItem('auth_token');
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    if (typeof document !== 'undefined') {
+      const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+      if (match && match[1]) {
+        headers['X-XSRF-TOKEN'] = decodeURIComponent(match[1]);
+      }
+    }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -52,17 +68,37 @@ export class ApiClient {
     return headers;
   }
 
+  /**
+   * Fetch Sanctum CSRF cookie prior to stateful authentication actions
+   */
+  async csrfCookie(): Promise<void> {
+    try {
+      await fetch(`${SANCTUM_URL}/sanctum/csrf-cookie`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+    } catch (e) {
+      console.warn('Sanctum CSRF cookie initialization notice:', e);
+    }
+  }
+
   private async handleResponse<T>(response: Response): Promise<T> {
+    const requestId = response.headers.get('X-Request-ID') || undefined;
+
     if (response.ok) {
       try {
-        return await response.json() as T;
+        const json = await response.json();
+        if (json && typeof json === 'object' && !json.request_id && requestId) {
+          json.request_id = requestId;
+        }
+        return json as T;
       } catch {
         return {} as T;
       }
     }
 
     const status = response.status;
-    let message = 'An error occurred';
+    let message = 'An unexpected API error occurred.';
     let errors: Record<string, string[]> | undefined;
 
     try {
@@ -70,92 +106,97 @@ export class ApiClient {
       message = errorData.message || message;
       errors = errorData.errors;
     } catch {
-      // Ignored if response is not JSON
+      // Ignored if non-JSON response
     }
 
-    // Specific Laravel status code handling
-    switch (status) {
-      case 401:
-        // Unauthorized
-        console.warn('API 401 Unauthorized: Redirecting/Clearing session...');
-        localStorage.removeItem('auth_token');
-        window.dispatchEvent(new Event('auth_state_changed'));
-        break;
-      case 403:
-        // Forbidden
-        console.error('API 403 Forbidden: Insufficient permissions.');
-        break;
-      case 404:
-        // Not Found
-        console.error('API 404 Not Found.');
-        break;
-      case 422:
-        // Laravel Validation Errors
-        console.error('API 422 Validation Error:', errors);
-        break;
-      case 429:
-        // Rate Limiting
-        console.error('API 429 Too Many Requests: Please slow down.');
-        break;
-      case 500:
-        // Internal Server Error
-        console.error('API 500 Internal Server Error.');
-        break;
-      default:
-        console.error(`API Error ${status}: ${message}`);
+    if (status === 401 && typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token');
+      window.dispatchEvent(new CustomEvent('auth_unauthorized'));
     }
 
-    throw new ApiError(message, status, errors);
+    throw new ApiError(message, status, errors, requestId);
   }
 
   async get<T>(path: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'GET',
-      headers: this.getHeaders(),
-      ...options,
-    });
-    return this.handleResponse<T>(response);
+    try {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: 'GET',
+        headers: this.getHeaders(),
+        credentials: 'include',
+        ...options,
+      });
+      return await this.handleResponse<T>(response);
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Unable to connect to backend service. Please check API server.', 0);
+    }
   }
 
   async post<T>(path: string, body?: any, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
-      ...options,
-    });
-    return this.handleResponse<T>(response);
+    try {
+      const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: 'POST',
+        headers: this.getHeaders(isFormData),
+        body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
+        credentials: 'include',
+        ...options,
+      });
+      return await this.handleResponse<T>(response);
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Unable to connect to backend service. Please check API server.', 0);
+    }
   }
 
   async put<T>(path: string, body?: any, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
-      ...options,
-    });
-    return this.handleResponse<T>(response);
+    try {
+      const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: 'PUT',
+        headers: this.getHeaders(isFormData),
+        body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
+        credentials: 'include',
+        ...options,
+      });
+      return await this.handleResponse<T>(response);
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Unable to connect to backend service. Please check API server.', 0);
+    }
   }
 
   async patch<T>(path: string, body?: any, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'PATCH',
-      headers: this.getHeaders(),
-      body: body ? JSON.stringify(body) : undefined,
-      ...options,
-    });
-    return this.handleResponse<T>(response);
+    try {
+      const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: 'PATCH',
+        headers: this.getHeaders(isFormData),
+        body: isFormData ? body : (body ? JSON.stringify(body) : undefined),
+        credentials: 'include',
+        ...options,
+      });
+      return await this.handleResponse<T>(response);
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Unable to connect to backend service. Please check API server.', 0);
+    }
   }
 
   async delete<T>(path: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${BASE_URL}${path}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-      ...options,
-    });
-    return this.handleResponse<T>(response);
+    try {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+        credentials: 'include',
+        ...options,
+      });
+      return await this.handleResponse<T>(response);
+    } catch (err: any) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError('Unable to connect to backend service. Please check API server.', 0);
+    }
   }
 }
 
 export const apiClient = new ApiClient();
-

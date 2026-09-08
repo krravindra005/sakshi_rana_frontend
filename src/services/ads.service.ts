@@ -1,26 +1,19 @@
 import { Ad } from '../types/ad';
-import { mockAds } from '../data/mock-ads';
 import { apiClient, ApiResponse, ApiPaginatedResponse } from '../lib/api/client';
+import { mapApiAdToFrontendAd } from '../lib/mappers';
 
 export class AdsService {
-  private static storageKey = 'marketplace_user_ads';
-
   /**
-   * Get all ads via API V2
+   * Get all published ads via API V2
    */
   static async getAll(): Promise<Ad[]> {
     try {
-      const response = await apiClient.get<ApiPaginatedResponse<Ad>>('/ads');
-      return response.data && response.data.length > 0 ? response.data : this.getLocalAll();
+      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads');
+      const items = response.data || [];
+      return items.map(mapApiAdToFrontendAd);
     } catch {
-      return this.getLocalAll();
+      return [];
     }
-  }
-
-  private static getLocalAll(): Ad[] {
-    const userAdsJson = localStorage.getItem(this.storageKey);
-    const userAds: Ad[] = userAdsJson ? JSON.parse(userAdsJson) : [];
-    return [...userAds, ...mockAds];
   }
 
   /**
@@ -28,16 +21,12 @@ export class AdsService {
    */
   static async getFeatured(limit?: number): Promise<Ad[]> {
     try {
-      const response = await apiClient.get<ApiPaginatedResponse<Ad>>('/ads?featured=true');
-      if (response.data && response.data.length > 0) {
-        return limit ? response.data.slice(0, limit) : response.data;
-      }
+      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads?featured=true');
+      const items = (response.data || []).map(mapApiAdToFrontendAd);
+      return limit ? items.slice(0, limit) : items;
     } catch {
-      // Fallback
+      return [];
     }
-    const all = await this.getAll();
-    const featured = all.filter((ad) => ad.isFeatured);
-    return limit ? featured.slice(0, limit) : featured;
   }
 
   /**
@@ -45,62 +34,51 @@ export class AdsService {
    */
   static async getLatest(limit?: number): Promise<Ad[]> {
     const all = await this.getAll();
-    const sorted = [...all].reverse();
-    return limit ? sorted.slice(0, limit) : sorted;
+    return limit ? all.slice(0, limit) : all;
   }
 
   /**
-   * Get a single advertisement by slug via API V2
+   * Get a single advertisement by slug or ID via API V2
    */
   static async getBySlug(slug: string): Promise<Ad | null> {
     try {
-      const response = await apiClient.get<ApiResponse<Ad>>(`/ads/${slug}`);
-      if (response.data) return response.data;
+      const response = await apiClient.get<ApiResponse<any>>(`/ads/${slug}`);
+      if (response.data) {
+        return mapApiAdToFrontendAd(response.data);
+      }
     } catch {
-      // Fallback
+      return null;
     }
-    const all = await this.getAll();
-    const ad = all.find((a) => a.slug === slug);
-    return ad ? { ...ad } : null;
+    return null;
   }
 
   /**
-   * Create / Save a new advertisement via API V2
+   * Create / Save a new draft advertisement via API V2
    */
-  static async createAd(newAd: Omit<Ad, 'id' | 'postedAt' | 'viewsCount'>): Promise<Ad> {
-    try {
-      const response = await apiClient.post<ApiResponse<Ad>>('/ads', {
-        title: newAd.title,
-        description: newAd.description,
-        category_id: 1,
-        city_id: 1,
-        profile_name: newAd.profileName || 'Advertiser',
-        profile_image: newAd.profileImage,
-        contact_phone: newAd.contact?.phone || '+91 99999 88888',
-        contact_whatsapp: newAd.contact?.whatsapp || '+91 99999 88888',
-        attributes: newAd.attributes,
-        services: newAd.services,
-      });
-
-      if (response.data) return response.data;
-    } catch {
-      // Fallback to local storage creation
-    }
-
-    const allUserAdsJson = localStorage.getItem(this.storageKey);
-    const userAds: Ad[] = allUserAdsJson ? JSON.parse(allUserAdsJson) : [];
-    
-    const ad: Ad = {
-      ...newAd,
-      id: `user-ad-${Date.now()}`,
-      postedAt: 'Just now',
-      viewsCount: 0,
+  static async createAd(newAd: any): Promise<Ad> {
+    const payload = {
+      title: newAd.title,
+      description: newAd.description,
+      category_id: newAd.category_id || newAd.categoryId || 1,
+      city_id: newAd.city_id || newAd.cityId || 1,
+      area_id: newAd.area_id || newAd.areaId || null,
+      price: newAd.price || 1500,
+      contact_phone: newAd.contact?.phone || newAd.contact_phone || '+919876543210',
+      contact_whatsapp: newAd.contact?.whatsapp || newAd.contact_whatsapp || '+919876543210',
+      contact_email: newAd.contact?.email || newAd.contact_email || 'advertiser@example.com',
+      filters: newAd.attributes || newAd.filters || {},
     };
 
-    userAds.push(ad);
-    localStorage.setItem(this.storageKey, JSON.stringify(userAds));
-    
-    return Promise.resolve(ad);
+    const response = await apiClient.post<ApiResponse<any>>('/ads', payload);
+    return mapApiAdToFrontendAd(response.data);
+  }
+
+  /**
+   * Submit ad for moderation review via API V2
+   */
+  static async submitAd(id: string | number): Promise<Ad> {
+    const response = await apiClient.post<ApiResponse<any>>(`/ads/${id}/submit`);
+    return mapApiAdToFrontendAd(response.data);
   }
 
   /**
@@ -108,26 +86,39 @@ export class AdsService {
    */
   static async getMyAds(): Promise<Ad[]> {
     try {
-      const response = await apiClient.get<ApiResponse<Ad[]>>('/me/ads');
-      if (response.data) return response.data;
+      const response = await apiClient.get<ApiPaginatedResponse<any>>('/me/ads');
+      const items = response.data || [];
+      return items.map(mapApiAdToFrontendAd);
     } catch {
-      // Fallback
+      return [];
     }
-
-    const userAdsJson = localStorage.getItem(this.storageKey);
-    return userAdsJson ? JSON.parse(userAdsJson) : [];
   }
 
   /**
-   * Delete user ad
+   * Pause advertisement via API V2
    */
-  static async deleteAd(id: string): Promise<boolean> {
-    const userAdsJson = localStorage.getItem(this.storageKey);
-    if (!userAdsJson) return false;
-    let userAds: Ad[] = JSON.parse(userAdsJson);
-    const lengthBefore = userAds.length;
-    userAds = userAds.filter((ad) => ad.id !== id);
-    localStorage.setItem(this.storageKey, JSON.stringify(userAds));
-    return lengthBefore !== userAds.length;
+  static async pauseAd(id: string | number): Promise<Ad> {
+    const response = await apiClient.post<ApiResponse<any>>(`/ads/${id}/pause`);
+    return mapApiAdToFrontendAd(response.data);
+  }
+
+  /**
+   * Republish advertisement via API V2
+   */
+  static async republishAd(id: string | number): Promise<Ad> {
+    const response = await apiClient.post<ApiResponse<any>>(`/ads/${id}/republish`);
+    return mapApiAdToFrontendAd(response.data);
+  }
+
+  /**
+   * Delete user ad via API V2
+   */
+  static async deleteAd(id: string | number): Promise<boolean> {
+    try {
+      await apiClient.delete(`/ads/${id}`);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

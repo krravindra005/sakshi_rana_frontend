@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { AdsService } from '../../services/ads.service';
 import { UsersService } from '../../services/users.service';
+import { WalletService } from '../../services/wallet.service';
+import { FavoritesService } from '../../services/favorites.service';
 import { Ad } from '../../types/ad';
 import { UserProfile, UserWallet, WalletTransaction } from '../../types/user';
 import { 
@@ -57,47 +59,85 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
 
   // 2. Fetch all user data
   useEffect(() => {
+    let mounted = true;
     const fetchUserData = async () => {
       // Profile & Wallet
       const prof = UsersService.getProfile();
-      setProfile(prof);
-      setEditName(prof.name);
-      setEditPhone(prof.phone || '');
+      if (mounted) {
+        setProfile(prof);
+        setEditName(prof.name);
+        setEditPhone(prof.phone || '');
+      }
 
-      setWallet(UsersService.getWallet());
-      setTransactions(UsersService.getTransactions());
+      try {
+        const w = await WalletService.getWallet();
+        if (mounted) setWallet({ balance: w.balance || 0, currency: w.currency_code || 'Credits' });
+      } catch {
+        if (mounted) setWallet(UsersService.getWallet());
+      }
+
+      try {
+        const txs = await WalletService.getTransactions();
+        if (mounted) {
+          setTransactions(txs.map((tx: any) => ({
+            id: String(tx.id || tx.uuid),
+            amount: Number(tx.amount || 0),
+            type: tx.type || 'deposit',
+            description: tx.description || 'Wallet transaction',
+            date: tx.created_at ? new Date(tx.created_at).toLocaleDateString('en-US') : 'Today',
+            status: tx.status || 'completed'
+          })));
+        }
+      } catch {
+        if (mounted) setTransactions(UsersService.getTransactions());
+      }
 
       // User Ads
-      const ads = await AdsService.getMyAds();
-      setMyAds(ads);
+      try {
+        const ads = await AdsService.getMyAds();
+        if (mounted) setMyAds(ads);
+      } catch {
+        if (mounted) setMyAds([]);
+      }
 
       // Favorites
-      const favIds = UsersService.getFavorites();
-      const allAds = await AdsService.getAll();
-      const favorited = allAds.filter((ad) => favIds.includes(ad.id));
-      setFavoriteAds(favorited);
+      try {
+        const favs = await FavoritesService.getAll();
+        if (mounted) setFavoriteAds(favs);
+      } catch {
+        if (mounted) setFavoriteAds([]);
+      }
     };
     fetchUserData();
+    return () => { mounted = false; };
   }, [activeTab]);
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editName) {
-      const updated = UsersService.updateProfile({ name: editName, phone: editPhone });
+      const updated = await UsersService.updateProfile({ name: editName, phone: editPhone });
       setProfile(updated);
       alert('Your user profile was updated successfully.');
     }
   };
 
-  const handleTopUp = (e: React.FormEvent) => {
+  const handleTopUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseInt(topUpAmount);
     if (amount > 0) {
-      const updatedWallet = UsersService.updateWalletBalance(amount, 'deposit', `UPI Top-Up Credit Deposit`);
+      const updatedWallet = await UsersService.updateWalletBalance(amount, 'deposit', `UPI Top-Up Credit Deposit`);
       setWallet(updatedWallet);
-      setTransactions(UsersService.getTransactions());
+      const txs = await WalletService.getTransactions();
+      setTransactions(txs.map((tx: any) => ({
+        id: String(tx.id || tx.uuid),
+        amount: Number(tx.amount || 0),
+        type: tx.type || 'deposit',
+        description: tx.description || 'Wallet transaction',
+        date: tx.created_at ? new Date(tx.created_at).toLocaleDateString('en-US') : 'Today',
+        status: tx.status || 'completed'
+      })));
       setTopUpAmount('1000');
-      alert(`Credits Added! Successfully topped up ${amount} credits to your advertising wallet.`);
+      alert(`Credits Top Up Order Initialized! Amount: ${amount} credits.`);
     }
   };
 

@@ -11,6 +11,9 @@ export interface UserProfile {
   emailVerified?: boolean;
   phoneVerified?: boolean;
   password?: string;
+  role?: string;
+  roles?: string[];
+  permissions?: string[];
 }
 
 // User model containing profile and meta-information

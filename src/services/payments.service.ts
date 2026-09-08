@@ -1,48 +1,28 @@
-import { Payment } from '../types/user';
+import { apiClient, ApiResponse } from '../lib/api/client';
+import { PaymentOrder } from '../types/api';
 
 export class PaymentsService {
   /**
-   * Create a credit top-up purchase order
+   * Create a payment order via POST /api/v2/payments/orders
    */
-  static async createOrder(amount: number, paymentMethod: string): Promise<{ success: boolean; data: { orderId: string; paymentUrl: string; amount: number; currency: string } }> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const orderId = `pay_ord_${Math.floor(100000 + Math.random() * 900000)}`;
-        
-        console.log(`Payment order ${orderId} created for ${amount} INR via ${paymentMethod}`);
-        
-        resolve({
-          success: true,
-          data: {
-            orderId,
-            paymentUrl: `https://gateway.example.com/pay/${orderId}`,
-            amount,
-            currency: 'INR'
-          }
-        });
-      }, 100);
+  static async createOrder(amount: number, provider: string = 'razorpay'): Promise<PaymentOrder> {
+    const response = await apiClient.post<ApiResponse<PaymentOrder>>('/payments/orders', {
+      amount,
+      currency: 'INR',
+      provider,
     });
+    return response.data;
   }
 
   /**
-   * Mock verifying order payment status
+   * Get payment details via GET /api/v2/payments/{id}
    */
-  static async verifyPayment(orderId: string): Promise<Payment> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const payment: Payment = {
-          id: `pay-${Date.now()}`,
-          userId: 'usr-101',
-          amount: 1000,
-          currency: 'INR',
-          paymentMethod: 'UPI',
-          paymentStatus: 'completed',
-          orderId,
-          transactionId: `txn-${Math.floor(100000000 + Math.random() * 900000000)}`,
-          createdAt: new Date().toISOString()
-        };
-        resolve(payment);
-      }, 100);
-    });
+  static async getPaymentDetails(id: string | number): Promise<PaymentOrder | null> {
+    try {
+      const response = await apiClient.get<ApiResponse<PaymentOrder>>(`/payments/${id}`);
+      return response.data;
+    } catch {
+      return null;
+    }
   }
 }

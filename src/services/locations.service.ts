@@ -1,72 +1,51 @@
-import { City, Area, Country, LocationState } from '../types/location';
 import { apiClient, ApiResponse } from '../lib/api/client';
-import { mockCities, mockAreas, mockCountries, mockStates } from '../data/mock-locations';
+import { Country, Region, City, Area } from '../types/api';
 
 export class LocationsService {
   /**
-   * Get all countries from API V2
+   * Get all active countries from API V2
    */
   static async getCountries(): Promise<Country[]> {
-    try {
-      const response = await apiClient.get<ApiResponse<Country[]>>('/locations/countries');
-      if (response.data && response.data.length > 0) return response.data;
-    } catch {
-      // Fallback
-    }
-    return [...mockCountries];
+    const response = await apiClient.get<ApiResponse<Country[]>>('/locations/countries');
+    return response.data || [];
   }
 
   /**
-   * Get states by countryId from API V2
+   * Get states/regions by countryId from API V2
    */
-  static async getStatesByCountry(countryId: string): Promise<LocationState[]> {
-    try {
-      const response = await apiClient.get<ApiResponse<LocationState[]>>(`/locations/regions?country_id=${countryId}`);
-      if (response.data && response.data.length > 0) return response.data;
-    } catch {
-      // Fallback
-    }
-    return mockStates.filter((s) => s.countryId === countryId);
+  static async getStatesByCountry(countryId: string | number): Promise<Region[]> {
+    const response = await apiClient.get<ApiResponse<Region[]>>(`/locations/regions?country_id=${countryId}`);
+    return response.data || [];
   }
 
   /**
-   * Get all active cities from API V2
+   * Get all active cities (or filtered by region/featured) from API V2
    */
-  static async getCities(): Promise<City[]> {
-    try {
-      const response = await apiClient.get<ApiResponse<City[]>>('/locations/cities');
-      if (response.data && response.data.length > 0) return response.data;
-    } catch {
-      // Fallback
-    }
-    return [...mockCities];
+  static async getCities(regionId?: string | number, featured?: boolean): Promise<City[]> {
+    let url = '/locations/cities';
+    const params: string[] = [];
+    if (regionId) params.push(`region_id=${regionId}`);
+    if (featured) params.push(`featured=true`);
+    if (params.length > 0) url += `?${params.join('&')}`;
+
+    const response = await apiClient.get<ApiResponse<City[]>>(url);
+    return response.data || [];
   }
 
   /**
    * Get city by its slug from API V2
    */
   static async getCityBySlug(slug: string): Promise<City | null> {
-    try {
-      const cities = await this.getCities();
-      const match = cities.find((c) => c.slug.toLowerCase() === slug.toLowerCase());
-      if (match) return match;
-    } catch {
-      // Fallback
-    }
-    const city = mockCities.find((c) => c.slug.toLowerCase() === slug.toLowerCase());
-    return city ? { ...city } : null;
+    const cities = await this.getCities();
+    const match = cities.find((c) => c.slug.toLowerCase() === slug.toLowerCase());
+    return match || null;
   }
 
   /**
    * Get areas inside a specific city from API V2
    */
-  static async getAreasByCity(cityId: string): Promise<Area[]> {
-    try {
-      const response = await apiClient.get<ApiResponse<Area[]>>(`/locations/areas?city_id=${cityId}`);
-      if (response.data && response.data.length > 0) return response.data;
-    } catch {
-      // Fallback
-    }
-    return mockAreas.filter((a) => a.cityId === cityId);
+  static async getAreasByCity(cityId: string | number): Promise<Area[]> {
+    const response = await apiClient.get<ApiResponse<Area[]>>(`/locations/areas?city_id=${cityId}`);
+    return response.data || [];
   }
 }

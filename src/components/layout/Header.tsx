@@ -328,7 +328,7 @@ export const Header: React.FC = () => {
             ) : (
               <button
                 id="header-signin-btn"
-                onClick={() => navigateTo('/')}
+                onClick={() => navigateTo('/login')}
                 className="py-2 px-4 border border-indigo-200 hover:bg-indigo-50/30 text-indigo-700 font-semibold text-xs lg:text-sm rounded-lg transition"
               >
                 Sign In
@@ -454,7 +454,7 @@ export const Header: React.FC = () => {
                 </>
               ) : (
                 <button
-                  onClick={() => { setIsMobileMenuOpen(false); navigateTo('/'); }}
+                  onClick={() => { setIsMobileMenuOpen(false); navigateTo('/login'); }}
                   className="flex items-center gap-2 py-2 px-3 text-sm text-indigo-600 hover:bg-indigo-50/50 rounded-lg font-bold transition text-left w-full"
                 >
                   <LogIn className="w-4.5 h-4.5 text-indigo-500" />

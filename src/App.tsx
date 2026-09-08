@@ -80,11 +80,16 @@ function AppContent() {
   const isUserProtectedRoute = route.path === '/post-ad' || route.path === '/dashboard';
   const isAdminRoute = route.path === '/admin';
 
-  // Check admin role authorization
+  // Check admin role & permission authorization
+  const userRoles = currentUser?.roles || (currentUser?.role ? [currentUser.role] : []);
+  const userPermissions = currentUser?.permissions || [];
   const isAdminUser = isLoggedIn && (
-    currentUser?.role === 'admin' ||
-    currentUser?.role === 'super_admin' ||
-    currentUser?.role === 'moderator' ||
+    userRoles.includes('super_admin') ||
+    userRoles.includes('admin') ||
+    userRoles.includes('moderator') ||
+    userRoles.includes('finance') ||
+    userRoles.includes('support') ||
+    userPermissions.length > 0 ||
     adminRole === 'Super Admin'
   );
 

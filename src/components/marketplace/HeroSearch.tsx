@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
-import { mockCategories } from '../../data/mock-categories';
-import { mockCities } from '../../data/mock-locations';
+import { CategoriesService } from '../../services/categories.service';
+import { LocationsService } from '../../services/locations.service';
+import { Category, City } from '../../types/api';
 import { Search, MapPin, Grid, Flame, Compass, SlidersHorizontal } from 'lucide-react';
 
 export const HeroSearch: React.FC = () => {
@@ -11,6 +12,15 @@ export const HeroSearch: React.FC = () => {
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    CategoriesService.getAll().then((res) => { if (mounted) setCategories(res); });
+    LocationsService.getCities().then((res) => { if (mounted) setCities(res); });
+    return () => { mounted = false; };
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +100,7 @@ export const HeroSearch: React.FC = () => {
               className="w-full pl-7 py-2.5 text-sm bg-transparent border-0 focus:outline-none appearance-none cursor-pointer text-slate-700"
             >
               <option value="">All Categories</option>
-              {mockCategories.map((cat) => (
+              {categories.map((cat) => (
                 <option key={cat.id} value={cat.slug}>{cat.name}</option>
               ))}
             </select>
@@ -107,8 +117,8 @@ export const HeroSearch: React.FC = () => {
               className="w-full pl-7 py-2.5 text-sm bg-transparent border-0 focus:outline-none appearance-none cursor-pointer text-slate-700"
             >
               <option value="">Select City</option>
-              {mockCities.map((city) => (
-                <option key={city.id} value={city.slug}>{city.name}</option>
+              {cities.map((c) => (
+                <option key={c.id} value={c.slug}>{c.name}</option>
               ))}
             </select>
             <div className="absolute right-3 pointer-events-none border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-400 w-0 h-0" />
