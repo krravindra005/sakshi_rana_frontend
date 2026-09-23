@@ -247,7 +247,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={chartData.categoriesShare}
+                  data={chartData?.categoriesShare || []}
                   cx="50%"
                   cy="50%"
                   innerRadius={55}
@@ -255,7 +255,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
                   paddingAngle={3}
                   dataKey="value"
                 >
-                  {chartData.categoriesShare.map((entry: any, index: number) => (
+                  {(chartData?.categoriesShare || []).map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
@@ -269,7 +269,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
           </div>
           {/* Pie Chart Legend list */}
           <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-[#667085] pt-2 border-t border-[#E4E7EC]">
-            {chartData.categoriesShare.map((item: any, idx: number) => (
+            {(chartData?.categoriesShare || []).map((item: any, idx: number) => (
               <div key={idx} className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: PIE_COLORS[idx % PIE_COLORS.length] }} />
                 <span className="truncate">{item.name} ({item.value}%)</span>

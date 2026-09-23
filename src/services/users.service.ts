@@ -85,6 +85,15 @@ export class UsersService {
     return profile;
   }
 
+  static async forgotPassword(email: string): Promise<string> {
+    return await AuthService.forgotPassword(email);
+  }
+
+  static async resetPassword(data: { email: string; token: string; password: string; password_confirmation?: string }): Promise<string> {
+    return await AuthService.resetPassword(data);
+  }
+
+
   static async verifyEmail(): Promise<UserProfile> {
     const profile = this.getProfile();
     profile.emailVerified = true;

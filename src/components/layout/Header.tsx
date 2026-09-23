@@ -312,6 +312,15 @@ export const Header: React.FC = () => {
                         <Settings className="w-4 h-4 text-slate-400" />
                         Profile Settings
                       </button>
+                      {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator' || currentUser?.role === 'finance' || currentUser?.role === 'support' || (currentUser?.roles && currentUser.roles.length > 0)) && (
+                        <button
+                          onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/admin/dashboard'); }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-rose-700 bg-rose-50 font-bold hover:bg-rose-100 rounded-lg transition my-1"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-rose-600" />
+                          Admin Console
+                        </button>
+                      )}
                     </div>
                     <div className="border-t border-slate-50 p-1">
                       <button

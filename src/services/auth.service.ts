@@ -60,19 +60,25 @@ export class AuthService {
   }
 
   /**
-   * Request password reset link
+   * Request password reset link via API V2
    */
-  static async forgotPassword(email: string): Promise<boolean> {
-    await apiClient.post('/auth/forgot-password', { email });
-    return true;
+  static async forgotPassword(email: string): Promise<string> {
+    await apiClient.csrfCookie();
+    const response = await apiClient.post<ApiResponse<any>>('/auth/forgot-password', { email });
+    return response.message || 'Password reset link sent to your email.';
   }
 
   /**
-   * Reset password with token
+   * Reset password with token via API V2
    */
-  static async resetPassword(email: string, token: string, password: string): Promise<boolean> {
-    await apiClient.post('/auth/reset-password', { email, token, password, password_confirmation: password });
-    return true;
+  static async resetPassword(data: { email: string; token: string; password: string; password_confirmation?: string }): Promise<string> {
+    await apiClient.csrfCookie();
+    const payload = {
+      ...data,
+      password_confirmation: data.password_confirmation || data.password,
+    };
+    const response = await apiClient.post<ApiResponse<any>>('/auth/reset-password', payload);
+    return response.message || 'Password has been reset successfully.';
   }
 
   /**

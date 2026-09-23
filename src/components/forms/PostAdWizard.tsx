@@ -5,26 +5,23 @@ import { LocationsService } from '../../services/locations.service';
 import { mockFilterConfig } from '../../data/mock-filters';
 import { AdsService } from '../../services/ads.service';
 import { UsersService } from '../../services/users.service';
-import { Ad, AdAttributes } from '../../types/ad';
+import { AdAttributes } from '../../types/ad';
 import { 
   ChevronRight, 
   ChevronLeft, 
-  Save, 
   Check, 
   Upload, 
   Trash2, 
   AlertCircle, 
   ShieldCheck, 
   Info, 
-  Sparkles,
-  Camera,
   Star
 } from 'lucide-react';
 
 export const PostAdWizard: React.FC = () => {
   const { navigateTo } = useRouter();
   
-  // Wizard steps
+  // Wizard steps matching image design
   const steps = [
     { num: 1, name: 'Category' },
     { num: 2, name: 'Location' },
@@ -45,7 +42,7 @@ export const PostAdWizard: React.FC = () => {
   const [category, setCategory] = useState('');
   const [country, setCountry] = useState('India');
   const [state, setState] = useState('Delhi NCR');
-  const [city, setCity] = useState('delhi');
+  const [city, setCity] = useState('');
   const [area, setArea] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -67,47 +64,97 @@ export const PostAdWizard: React.FC = () => {
   const [email, setEmail] = useState('');
 
   // Image Upload State
-  const [images, setImages] = useState<string[]>([
-    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=400',
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=400'
-  ]);
+  const [images, setImages] = useState<string[]>([]);
   const [coverImageIdx, setCoverImageIdx] = useState(0);
 
   // Status/Validation states
   const [validationError, setValidationError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // API State
+  // API Location State
   const [categoriesList, setCategoriesList] = useState<any[]>([]);
+  const [countriesList, setCountriesList] = useState<any[]>([]);
+  const [regionsList, setRegionsList] = useState<any[]>([]);
   const [citiesList, setCitiesList] = useState<any[]>([]);
   const [areasList, setAreasList] = useState<any[]>([]);
 
+  // Selected Location Object IDs
+  const [selectedCountryId, setSelectedCountryId] = useState<string | number>('');
+  const [selectedRegionId, setSelectedRegionId] = useState<string | number>('');
+  const [selectedCityId, setSelectedCityId] = useState<string | number>('');
+  const [selectedAreaId, setSelectedAreaId] = useState<string | number>('');
+
+  // 1. Fetch Categories & Countries on Mount (GET /locations/countries)
   useEffect(() => {
     CategoriesService.getAll().then((data) => {
-      setCategoriesList(data);
-      if (data.length > 0 && !category) {
-        setCategory(data[0].slug);
+      if (data && data.length > 0) {
+        setCategoriesList(data);
+        setCategory(prev => prev || data[0].slug);
       }
     }).catch(() => {});
 
-    LocationsService.getCities().then((data) => {
-      setCitiesList(data);
-      if (data.length > 0 && !city) {
-        setCity(data[0].slug);
+    LocationsService.getCountries().then((data) => {
+      setCountriesList(data);
+      if (data && data.length > 0) {
+        const defaultCountry = data[0];
+        setSelectedCountryId(defaultCountry.id);
+        setCountry(defaultCountry.name);
       }
     }).catch(() => {});
   }, []);
 
+  // 2. Cascade Country -> Regions (GET /locations/regions?country_id=...)
   useEffect(() => {
-    if (city) {
-      const selectedCityObj = citiesList.find((c) => c.slug === city || c.id === city);
-      if (selectedCityObj) {
-        LocationsService.getAreasByCity(selectedCityObj.id).then(setAreasList).catch(() => setAreasList([]));
-      }
+    if (selectedCountryId) {
+      LocationsService.getStatesByCountry(selectedCountryId).then((data) => {
+        setRegionsList(data);
+        if (data && data.length > 0) {
+          const defaultReg = data[0];
+          setSelectedRegionId(defaultReg.id);
+          setState(defaultReg.name);
+        } else {
+          setSelectedRegionId('');
+          setState('');
+        }
+      }).catch(() => setRegionsList([]));
     }
-  }, [city, citiesList]);
+  }, [selectedCountryId]);
 
-  // 1. Check for stored draft on component load
+  // 3. Cascade Region -> Cities (GET /locations/cities?region_id=...)
+  useEffect(() => {
+    LocationsService.getCities(selectedRegionId || undefined).then((data) => {
+      setCitiesList(data);
+      if (data && data.length > 0) {
+        const match = data.find(c => c.slug === city || String(c.id) === String(selectedCityId)) || data[0];
+        setSelectedCityId(match.id);
+        setCity(match.slug || match.name);
+      } else {
+        setSelectedCityId('');
+        setCity('');
+      }
+    }).catch(() => setCitiesList([]));
+  }, [selectedRegionId]);
+
+  // 4. Cascade City -> Areas (GET /locations/areas?city_id=...)
+  useEffect(() => {
+    if (selectedCityId) {
+      LocationsService.getAreasByCity(selectedCityId).then((data) => {
+        setAreasList(data);
+        if (data && data.length > 0) {
+          const match = data.find(a => a.name === area || String(a.id) === String(selectedAreaId)) || data[0];
+          setSelectedAreaId(match.id);
+          setArea(match.name);
+        } else {
+          setSelectedAreaId('');
+          setArea('');
+        }
+      }).catch(() => setAreasList([]));
+    } else {
+      setAreasList([]);
+    }
+  }, [selectedCityId]);
+
+  // Check for stored draft on component load
   useEffect(() => {
     const draft = UsersService.getDraftAd();
     if (draft) {
@@ -115,7 +162,7 @@ export const PostAdWizard: React.FC = () => {
     }
   }, []);
 
-  // 2. Local autosave whenever fields change
+  // Local autosave whenever fields change
   useEffect(() => {
     if (category || title || description) {
       const draftPayload = {
@@ -134,10 +181,10 @@ export const PostAdWizard: React.FC = () => {
   const handleRestoreDraft = () => {
     const draft = UsersService.getDraftAd();
     if (draft) {
-      setCategory(draft.category || '');
+      setCategory(draft.category || 'call-girls');
       setCountry(draft.country || 'India');
       setState(draft.state || 'Delhi NCR');
-      setCity(draft.city || '');
+      setCity(draft.city || 'delhi');
       setArea(draft.area || '');
       setTitle(draft.title || '');
       setDescription(draft.description || '');
@@ -269,28 +316,10 @@ export const PostAdWizard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#F8FAFC] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 flex items-center justify-center font-sans">
+      <div className="w-full max-w-5xl">
         
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold font-mono uppercase tracking-wider mb-1">
-              <Sparkles className="w-4 h-4" />
-              Publisher Dashboard
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Post Classified Listing
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigateTo('/dashboard')}
-            className="text-xs font-bold text-slate-500 hover:text-slate-900 border border-slate-200 bg-white px-3.5 py-2 rounded-xl transition shadow-sm self-start sm:self-auto"
-          >
-            Cancel & Exit
-          </button>
-        </div>
-
+        {/* Draft Restore Alert */}
         {draftBannerVisible && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 animate-in fade-in duration-300">
             <div className="flex items-center gap-2.5">
@@ -303,14 +332,14 @@ export const PostAdWizard: React.FC = () => {
               <button
                 type="button"
                 onClick={handleRestoreDraft}
-                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition shadow-sm"
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
               >
                 Restore Draft
               </button>
               <button
                 type="button"
                 onClick={handleDiscardDraft}
-                className="px-3 py-1.5 bg-white border border-amber-200 text-amber-800 hover:bg-amber-100/50 rounded-lg text-xs font-semibold transition"
+                className="px-3.5 py-1.5 bg-white border border-amber-200 text-amber-800 hover:bg-amber-100/50 rounded-xl text-xs font-semibold transition"
               >
                 Discard
               </button>
@@ -318,98 +347,317 @@ export const PostAdWizard: React.FC = () => {
           </div>
         )}
 
-        {/* Wizard Progress Steps Bar */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm mb-8 overflow-x-auto">
-          <div className="flex items-center justify-between min-w-[600px] gap-2">
-            {steps.map((step) => {
-              const isActive = currentStep === step.num;
-              const isCompleted = currentStep > step.num;
-              
-              return (
-                <div key={step.num} className="flex items-center gap-2">
-                  <div 
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold font-mono transition ${
-                      isActive 
-                        ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' 
-                        : isCompleted 
-                        ? 'bg-emerald-500 text-white' 
-                        : 'bg-slate-100 text-slate-400'
-                    }`}
-                  >
-                    {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.num}
-                  </div>
-                  <span className={`text-xs font-medium whitespace-nowrap ${isActive ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
-                    {step.name}
-                  </span>
-                  {step.num < 10 && <ChevronRight className="w-3.5 h-3.5 text-slate-300 shrink-0" />}
-                </div>
-              );
-            })}
+        {/* Outer Card Container matching reference image */}
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl overflow-hidden flex flex-col md:flex-row min-h-[620px]">
+          
+          {/* Left Dark Navy Sidebar */}
+          <div className="w-full md:w-72 shrink-0 bg-[#0B132B] text-white p-7 sm:p-8 flex flex-col justify-between select-none">
+            <div>
+              {/* Sidebar Header */}
+              <div className="text-[11px] font-bold tracking-widest uppercase text-[#E2A829] font-mono mb-1">
+                AD PUBLISHER
+              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight pb-5 border-b border-slate-800/80 mb-6">
+                Creation Wizard
+              </h1>
+
+              {/* Step Navigation List */}
+              <nav className="space-y-4">
+                {steps.map((step) => {
+                  const isActive = currentStep === step.num;
+                  const isCompleted = currentStep > step.num;
+
+                  return (
+                    <button
+                      key={step.num}
+                      type="button"
+                      onClick={() => {
+                        if (isCompleted || step.num < currentStep) {
+                          setCurrentStep(step.num);
+                        }
+                      }}
+                      className={`w-full flex items-center gap-3.5 text-left transition-all ${
+                        isActive 
+                          ? 'opacity-100' 
+                          : isCompleted 
+                          ? 'opacity-90 hover:opacity-100' 
+                          : 'opacity-50 cursor-not-allowed'
+                      }`}
+                    >
+                      {/* Step Circle Badge */}
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all ${
+                        isActive 
+                          ? 'bg-[#5046E5] text-white ring-4 ring-indigo-500/20 shadow-sm' 
+                          : isCompleted 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'border border-slate-700/80 bg-slate-800/30 text-slate-400'
+                      }`}>
+                        {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.num}
+                      </div>
+
+                      {/* Step Name */}
+                      <span className={`text-sm sm:text-base font-semibold tracking-wide ${
+                        isActive 
+                          ? 'text-white font-bold' 
+                          : isCompleted 
+                          ? 'text-slate-200' 
+                          : 'text-slate-400'
+                      }`}>
+                        {step.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
+
+            <div className="pt-6 border-t border-slate-800/60 mt-8 hidden md:block">
+              <button
+                type="button"
+                onClick={() => navigateTo('/dashboard')}
+                className="text-xs font-medium text-slate-400 hover:text-white transition flex items-center gap-1.5"
+              >
+                <ChevronLeft className="w-4 h-4" /> Exit Wizard
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* Wizard Main Card */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-          <div className="p-6 sm:p-8">
+          {/* Right Main Content Area */}
+          <div className="flex-1 bg-white p-7 sm:p-10 flex flex-col justify-between">
+            <div>
+              
+              {/* Validation alert banner */}
+              {validationError && (
+                <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-semibold flex items-center gap-2 animate-pulse">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{validationError}</span>
+                </div>
+              )}
 
-            {/* Validation alert banner */}
-            {validationError && (
-              <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-center gap-2 animate-pulse">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{validationError}</span>
-              </div>
-            )}
+              {/* STEP 1: CATEGORY SELECTION (MATCHING IMAGE 1 EXACTLY) */}
+              {currentStep === 1 && (
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    What classified category is your listing?
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                    Select the primary service sector. This determines available filter attributes later.
+                  </p>
 
-            {/* STEP 3: AD CONTENT */}
-            {currentStep === 3 && (
-              <div className="space-y-4">
-                <h2 className="text-xl font-bold text-slate-900">Advertisement Title & Bio Description</h2>
-                <p className="text-slate-500 text-xs">Write a descriptive, non-provocative, highly elegant introduction for your profile.</p>
-                
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Title Heading</label>
-                    <input 
-                      id="wizard-ad-title-input"
-                      type="text"
-                      placeholder="e.g. Elegant social dinner companion - high class discretion"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:bg-white transition"
-                    />
-                    <span className="text-[10px] text-slate-400">Min 5 characters. Keep titles clean and descriptive.</span>
-                  </div>
+                  {/* 2-Column Category Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {categoriesList.map((catItem) => {
+                      const isSelected = category === catItem.slug;
+                      return (
+                        <div
+                          key={catItem.id || catItem.slug}
+                          onClick={() => setCategory(catItem.slug)}
+                          className={`group border rounded-2xl p-5 cursor-pointer transition-all duration-200 flex flex-col justify-between ${
+                            isSelected 
+                              ? 'border-[#5046E5] bg-white ring-1 ring-[#5046E5] shadow-sm' 
+                              : 'border-slate-200/90 bg-white hover:border-slate-300 hover:shadow-sm'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-2.5 mb-2">
+                              {/* Circle Bullet Icon */}
+                              <div className={`w-3 h-3 rounded-full shrink-0 transition-all ${
+                                isSelected 
+                                  ? 'bg-[#5046E5] ring-4 ring-indigo-50' 
+                                  : 'bg-slate-300 group-hover:bg-slate-400'
+                              }`} />
+                              
+                              <h3 className="text-slate-900 font-bold text-base sm:text-lg tracking-tight">
+                                {catItem.name}
+                              </h3>
+                            </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Biography / Description</label>
-                    <textarea 
-                      id="wizard-ad-desc-input"
-                      rows={6}
-                      placeholder="Introduce yourself, specify your service philosophy, communication languages, and other premium guidelines..."
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-3 text-slate-700 focus:outline-none focus:bg-white transition"
-                    />
-                    <span className="text-[10px] text-slate-400">Min 20 characters. Explicit descriptions or solicitations are strictly prohibited.</span>
+                            <p className="text-slate-400 text-xs leading-relaxed pl-5 font-normal">
+                              {catItem.description}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-              {/* STEP 4: PROFILE ATTRIBUTES */}
-              {currentStep === 4 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Profile Specifications</h2>
-                  <p className="text-slate-500 text-xs">Declare profile attributes so users can discover you via faceted searches.</p>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {/* STEP 2: LOCATION (USING GET /locations/countries, /regions, /cities, /areas) */}
+              {currentStep === 2 && (
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Where is your listing located?
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                    Select the country, state/region, primary city hub, and local area for your publication.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl">
+                    {/* Country Selector (GET /locations/countries) */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Nationality</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Country</label>
                       <select
-                        id="wizard-nationality"
+                        value={selectedCountryId}
+                        onChange={(e) => {
+                          const cId = e.target.value;
+                          setSelectedCountryId(cId);
+                          const matchedCountry = countriesList.find(c => String(c.id) === String(cId));
+                          if (matchedCountry) setCountry(matchedCountry.name);
+                        }}
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition font-medium"
+                      >
+                        {countriesList.length > 0 ? (
+                          countriesList.map((c) => (
+                            <option key={c.id || c.code} value={c.id}>
+                              {c.name} ({c.code || c.slug})
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">India</option>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* State / Region Selector (GET /locations/regions?country_id=...) */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">State / Region</label>
+                      <select
+                        value={selectedRegionId}
+                        onChange={(e) => {
+                          const rId = e.target.value;
+                          setSelectedRegionId(rId);
+                          const matchedRegion = regionsList.find(r => String(r.id) === String(rId));
+                          if (matchedRegion) setState(matchedRegion.name);
+                        }}
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition font-medium"
+                      >
+                        {regionsList.length > 0 ? (
+                          regionsList.map((r) => (
+                            <option key={r.id || r.code} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">All States / Regions</option>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Primary City Hub Selector (GET /locations/cities?region_id=...) */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Primary City Hub</label>
+                      <select
+                        value={selectedCityId}
+                        onChange={(e) => {
+                          const cId = e.target.value;
+                          setSelectedCityId(cId);
+                          const matchedCity = citiesList.find(c => String(c.id) === String(cId));
+                          if (matchedCity) setCity(matchedCity.slug || matchedCity.name);
+                        }}
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition font-medium"
+                      >
+                        {citiesList.length > 0 ? (
+                          citiesList.map((c) => (
+                            <option key={c.id || c.slug} value={c.id}>
+                              {c.name} {c.pincode ? `(${c.pincode})` : ''}
+                            </option>
+                          ))
+                        ) : (
+                          <option value="">No Cities Available</option>
+                        )}
+                      </select>
+                    </div>
+
+                    {/* Specific Locality / Area Selector (GET /locations/areas?city_id=...) */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Specific Locality / Area</label>
+                      {areasList.length > 0 ? (
+                        <select
+                          value={selectedAreaId}
+                          onChange={(e) => {
+                            const aId = e.target.value;
+                            setSelectedAreaId(aId);
+                            const matchedArea = areasList.find(a => String(a.id) === String(aId));
+                            if (matchedArea) setArea(matchedArea.name);
+                          }}
+                          className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition font-medium"
+                        >
+                          {areasList.map((a) => (
+                            <option key={a.id || a.slug} value={a.id}>
+                              {a.name} {a.pincode ? `(${a.pincode})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          placeholder="e.g. Connaught Place, Aerocity, Bandra"
+                          value={area}
+                          onChange={(e) => setArea(e.target.value)}
+                          className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: CONTENT */}
+              {currentStep === 3 && (
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Advertisement Title & Bio Description
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Write a descriptive, non-provocative, highly elegant introduction for your profile.
+                  </p>
+                  
+                  <div className="space-y-5 max-w-2xl">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Title Heading</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. Elegant social dinner companion - high class discretion"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
+                      />
+                      <span className="text-[11px] text-slate-400">Min 5 characters. Keep titles clean and descriptive.</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Biography / Description</label>
+                      <textarea 
+                        rows={6}
+                        placeholder="Introduce yourself, specify your service philosophy, communication languages, and other premium guidelines..."
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
+                      />
+                      <span className="text-[11px] text-slate-400">Min 20 characters. Explicit descriptions or solicitations are strictly prohibited.</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: ATTRIBUTES */}
+              {currentStep === 4 && (
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Profile Specifications
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Declare profile attributes so users can discover you via faceted searches.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-2xl">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Nationality</label>
+                      <select
                         value={nationality}
                         onChange={(e) => setNationality(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white transition"
                       >
                         {mockFilterConfig.nationalities.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
@@ -418,12 +666,11 @@ export const PostAdWizard: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Ethnicity</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Ethnicity</label>
                       <select
-                        id="wizard-ethnicity"
                         value={ethnicity}
                         onChange={(e) => setEthnicity(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white transition"
                       >
                         {mockFilterConfig.ethnicities.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
@@ -432,12 +679,11 @@ export const PostAdWizard: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Body Build</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Body Build</label>
                       <select
-                        id="wizard-body"
                         value={bodyType}
                         onChange={(e) => setBodyType(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white transition"
                       >
                         {mockFilterConfig.bodyTypes.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
@@ -446,12 +692,11 @@ export const PostAdWizard: React.FC = () => {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Hair Color</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Hair Color</label>
                       <select
-                        id="wizard-hair"
                         value={hairColor}
                         onChange={(e) => setHairColor(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white transition"
                       >
                         {mockFilterConfig.hairColors.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
@@ -459,13 +704,12 @@ export const PostAdWizard: React.FC = () => {
                       </select>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Intended Target Audience</label>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Intended Target Audience</label>
                       <select
-                        id="wizard-audience"
                         value={intendedAudience}
                         onChange={(e) => setIntendedAudience(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white transition"
                       >
                         {mockFilterConfig.intendedAudiences.map((o) => (
                           <option key={o.value} value={o.value}>{o.label}</option>
@@ -476,24 +720,27 @@ export const PostAdWizard: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 5: SELECT SERVICES */}
+              {/* STEP 5: SERVICES */}
               {currentStep === 5 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">What services do you provide?</h2>
-                  <p className="text-slate-500 text-xs">Select options representing your independent scheduling profile. Non-explicit labels only.</p>
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    What services do you provide?
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Select options representing your independent scheduling profile.
+                  </p>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 max-h-[300px] overflow-y-auto pr-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[320px] overflow-y-auto pr-2">
                     {mockFilterConfig.services.map((svc) => (
                       <label
                         key={svc.value}
-                        className={`p-3 border rounded-xl flex items-center gap-3 cursor-pointer transition ${
+                        className={`p-3.5 border rounded-2xl flex items-center gap-3 cursor-pointer transition ${
                           selectedServices.includes(svc.value)
-                            ? 'bg-indigo-50/40 border-indigo-500'
-                            : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/50'
+                            ? 'bg-indigo-50/40 border-[#5046E5] text-indigo-900'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
                         }`}
                       >
                         <input
-                          id={`wizard-service-${svc.value}`}
                           type="checkbox"
                           checked={selectedServices.includes(svc.value)}
                           onChange={() => {
@@ -505,31 +752,34 @@ export const PostAdWizard: React.FC = () => {
                           }}
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 shrink-0"
                         />
-                        <span className="text-xs text-slate-700 font-semibold">{svc.label}</span>
+                        <span className="text-xs font-bold">{svc.label}</span>
                       </label>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* STEP 6: PLACE OF SERVICE */}
+              {/* STEP 6: PLACE */}
               {currentStep === 6 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Place of Booking / Service Location</h2>
-                  <p className="text-slate-500 text-xs">Where do bookings take place? (Select multiple)</p>
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Place of Booking / Service Location
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Where do bookings take place? (Select multiple)
+                  </p>
                   
-                  <div className="space-y-3 pt-2">
+                  <div className="space-y-3 max-w-xl">
                     {mockFilterConfig.placesOfService.map((pl) => (
                       <label
                         key={pl.value}
-                        className={`p-4 border rounded-xl flex items-center gap-3 cursor-pointer transition ${
+                        className={`p-4 border rounded-2xl flex items-center gap-3.5 cursor-pointer transition ${
                           selectedPlaces.includes(pl.value)
-                            ? 'bg-indigo-50/40 border-indigo-500'
-                            : 'bg-slate-50 border-slate-200/60 hover:bg-slate-100/50'
+                            ? 'bg-indigo-50/40 border-[#5046E5]'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
                         }`}
                       >
                         <input
-                          id={`wizard-place-${pl.value}`}
                           type="checkbox"
                           checked={selectedPlaces.includes(pl.value)}
                           onChange={() => {
@@ -542,7 +792,7 @@ export const PostAdWizard: React.FC = () => {
                           className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4.5 w-4.5"
                         />
                         <div>
-                          <span className="text-xs text-slate-700 font-bold block">{pl.label}</span>
+                          <span className="text-sm font-bold text-slate-900 block">{pl.label}</span>
                         </div>
                       </label>
                     ))}
@@ -550,59 +800,63 @@ export const PostAdWizard: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 7: CONTACT INFORMATION */}
+              {/* STEP 7: CONTACT */}
               {currentStep === 7 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Direct Contact Details</h2>
-                  <p className="text-slate-500 text-xs">Enter fictional mock credentials. These appear in active contact slots.</p>
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Direct Contact Details
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Enter contact credentials to appear on your active profile listing.
+                  </p>
                   
-                  <div className="space-y-4 pt-2">
+                  <div className="space-y-4 max-w-xl">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Mobile Phone Call Number</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Mobile Phone Call Number</label>
                       <input 
-                        id="wizard-contact-phone"
                         type="text"
                         placeholder="e.g. +91 99999 00121"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white transition"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">WhatsApp Country Code & Phone</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">WhatsApp Country Code & Phone</label>
                       <input 
-                        id="wizard-contact-whatsapp"
                         type="text"
                         placeholder="e.g. 919999900121"
                         value={whatsapp}
                         onChange={(e) => setWhatsapp(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white transition"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Private Email (Optional)</label>
+                      <label className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono">Private Email (Optional)</label>
                       <input 
-                        id="wizard-contact-email"
                         type="email"
-                        placeholder="e.g. elena@auraclassifieds-mock.com"
+                        placeholder="e.g. contact@auraclassifieds-mock.com"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white transition"
+                        className="w-full text-sm bg-slate-50 border border-slate-200 rounded-xl p-3 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition"
                       />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* STEP 8: PHOTO UPLOADS */}
+              {/* STEP 8: IMAGES */}
               {currentStep === 8 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Upload Gallery Photos</h2>
-                  <p className="text-slate-500 text-xs">Upload non-explicit portraits or elegant lifestyle shots. Specify which photo serves as the profile cover card.</p>
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Upload Gallery Photos
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Upload portraits or lifestyle photos. Specify which photo serves as your cover image.
+                  </p>
                   
-                  {/* Drag and Drop Zone */}
                   <input
                     type="file"
                     id="wizard-file-input"
@@ -612,35 +866,26 @@ export const PostAdWizard: React.FC = () => {
                     className="hidden"
                   />
                   <div 
-                    id="wizard-dropzone"
                     onClick={() => document.getElementById('wizard-file-input')?.click()}
-                    className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center bg-slate-50 hover:bg-slate-100/50 cursor-pointer transition flex flex-col items-center justify-center gap-3"
+                    className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center bg-slate-50 hover:bg-slate-100/60 cursor-pointer transition flex flex-col items-center justify-center gap-2.5 max-w-xl"
                   >
-                    <div className="p-3 bg-white border border-slate-100 rounded-full text-slate-400 shadow-sm">
-                      <Upload className="w-6 h-6" />
+                    <div className="p-3 bg-white border border-slate-200/60 rounded-full text-slate-400 shadow-sm">
+                      <Upload className="w-5 h-5 text-indigo-600" />
                     </div>
                     <div>
                       <p className="text-sm font-bold text-slate-700">Drag and drop images here or click to browse</p>
-                      <p className="text-xs text-slate-400 mt-1">Accepts PNG, JPG. Maximum 5MB each. Non-explicit assets only.</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Accepts PNG, JPG. Maximum 5MB each.</p>
                     </div>
-                    <button 
-                      type="button" 
-                      className="text-xs font-semibold text-indigo-600 bg-white border border-slate-200 py-1.5 px-3.5 rounded-lg shadow-sm hover:bg-slate-50 transition"
-                    >
-                      Browse Files
-                    </button>
                   </div>
 
-                  {/* Thumbnail Previews with Cover setting */}
                   {images.length > 0 && (
-                    <div className="space-y-2 pt-2">
+                    <div className="space-y-2 pt-4">
                       <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">Uploaded Files ({images.length})</span>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl">
                         {images.map((img, idx) => (
-                          <div key={img + idx} className="border border-slate-200/60 rounded-xl overflow-hidden bg-slate-50 relative group h-28">
+                          <div key={img + idx} className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 relative group h-28">
                             <img src={img} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             
-                            {/* Toolbar overlays */}
                             <div className="absolute top-2 right-2 flex gap-1">
                               <button
                                 type="button"
@@ -662,7 +907,7 @@ export const PostAdWizard: React.FC = () => {
                               }`}
                             >
                               <Star className={`w-3 h-3 ${coverImageIdx === idx ? 'fill-current' : ''}`} />
-                              <span>{coverImageIdx === idx ? 'Cover Image' : 'Make Cover'}</span>
+                              <span>{coverImageIdx === idx ? 'Cover' : 'Make Cover'}</span>
                             </button>
                           </div>
                         ))}
@@ -672,85 +917,69 @@ export const PostAdWizard: React.FC = () => {
                 </div>
               )}
 
-              {/* STEP 9: AD PREVIEW */}
+              {/* STEP 9: PREVIEW */}
               {currentStep === 9 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-bold text-slate-900">Preview Advertisement Draft</h2>
-                  <p className="text-slate-500 text-xs">Verify your listing formatting. This mirrors how users discover you.</p>
+                <div>
+                  <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight mb-2">
+                    Preview Advertisement Draft
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                    Verify your listing details before publishing.
+                  </p>
                   
-                  <div className="border border-slate-100 rounded-2xl bg-slate-50 p-4 pt-6 max-h-[350px] overflow-y-auto space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-5">
-                      <div className="w-32 h-36 bg-white border border-slate-200 rounded-xl overflow-hidden shrink-0">
+                  <div className="border border-slate-200 rounded-2xl bg-slate-50/50 p-5 space-y-4 max-w-2xl">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <div className="w-32 h-32 bg-white border border-slate-200 rounded-xl overflow-hidden shrink-0">
                         <img src={images[coverImageIdx] || images[0]} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>
-                      <div className="space-y-2">
-                        <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-slate-900 text-amber-400 text-[9px] font-bold uppercase rounded-md tracking-wider">
-                          Draft Review
+                      <div className="space-y-1.5">
+                        <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase rounded-md tracking-wider">
+                          Draft Preview
                         </div>
                         <h3 className="font-bold text-slate-900 text-lg leading-snug">{title || 'Untitled Advertisement'}</h3>
                         <div className="text-xs text-slate-500 flex items-center gap-2">
-                          <span className="capitalize">{city} Area: {area || 'Not selected'}</span>
+                          <span className="capitalize">{city} Area: {area || 'Not specified'}</span>
                           <span>&bull;</span>
-                          <span className="capitalize">{category}</span>
+                          <span className="capitalize font-semibold text-indigo-600">{category}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200 pt-3">
+                    <div className="border-t border-slate-200/80 pt-3">
                       <h4 className="text-xs font-bold text-slate-400 uppercase font-mono tracking-wider mb-1.5">Biography Description</h4>
-                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line bg-white p-3 rounded-xl border border-slate-200/50">
+                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line bg-white p-3 rounded-xl border border-slate-200/70">
                         {description || 'No description provided.'}
                       </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500 font-mono">
-                      <div className="bg-white p-2 border border-slate-100 rounded-lg">
-                        <strong>ORIGINS:</strong> <span className="text-slate-700">{nationality}</span>
-                      </div>
-                      <div className="bg-white p-2 border border-slate-100 rounded-lg">
-                        <strong>BODY TYPE:</strong> <span className="text-slate-700">{bodyType}</span>
-                      </div>
-                      <div className="bg-white p-2 border border-slate-100 rounded-lg">
-                        <strong>HAIR:</strong> <span className="text-slate-700">{hairColor}</span>
-                      </div>
-                      <div className="bg-white p-2 border border-slate-100 rounded-lg">
-                        <strong>AUDIENCE:</strong> <span className="text-slate-700">{intendedAudience}</span>
-                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* STEP 10: SUBMIT FOR REVIEW */}
+              {/* STEP 10: SUBMIT */}
               {currentStep === 10 && (
-                <div className="space-y-4 text-center py-6">
-                  <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
+                <div className="text-center py-6 max-w-xl mx-auto space-y-4">
+                  <div className="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto border border-emerald-100 shadow-sm">
                     <ShieldCheck className="w-8 h-8" />
                   </div>
-                  <h2 className="text-xl font-bold text-slate-900">Ready for moderator review</h2>
-                  <p className="text-slate-500 text-sm max-w-md mx-auto leading-relaxed">
-                    By submitting your classified advertisement, you certify that all details represent consenting adult mock companions, you agree to our Terms of Use, and accept that scam profiles are terminated without appeal.
+                  <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                    Ready for moderator review
+                  </h2>
+                  <p className="text-slate-500 text-sm leading-relaxed">
+                    By submitting your classified advertisement, you certify that all details represent consenting adult companions and agree to our Terms of Use.
                   </p>
-                  
-                  <div className="p-4 bg-indigo-50/40 border border-indigo-100/30 rounded-xl text-xs text-indigo-700 leading-relaxed text-left max-w-md mx-auto space-y-1.5">
-                    <strong>Submission Actions:</strong>
-                    <p>&bull; Publishing cost: 100 credits deducted from wallet.</p>
-                    <p>&bull; Audits are processed by administrators within 2 hours.</p>
-                  </div>
                 </div>
               )}
 
             </div>
 
-            {/* LOWER ACTIONS BUTTON BAR */}
-            <div className="border-t border-slate-100 pt-6 mt-8 flex flex-col sm:flex-row gap-3 justify-between items-center text-xs">
-              
-              {/* Left action */}
+            {/* Bottom Actions Row (Matching Image 1 Pill Button) */}
+            <div className="border-t border-slate-100 pt-6 mt-8 flex items-center justify-between">
               <div>
                 {currentStep > 1 && (
                   <button
+                    type="button"
                     onClick={handlePrevStep}
-                    className="flex items-center gap-1 py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition"
+                    className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs sm:text-sm transition"
                   >
                     <ChevronLeft className="w-4 h-4" />
                     <span>Previous Step</span>
@@ -758,23 +987,22 @@ export const PostAdWizard: React.FC = () => {
                 )}
               </div>
 
-              {/* Right actions */}
-              <div className="flex gap-2 w-full sm:w-auto">
+              <div>
                 {currentStep < 10 ? (
                   <button
-                    id="wizard-continue-btn"
+                    type="button"
                     onClick={handleNextStep}
-                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 py-2.5 px-6 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl transition shadow-sm"
+                    className="bg-[#0B132B] hover:bg-[#152042] text-white font-bold text-sm px-7 py-3 rounded-2xl flex items-center gap-2 shadow-md transition-all active:scale-[0.98]"
                   >
                     <span>Continue</span>
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 ) : (
                   <button
-                    id="wizard-submit-btn"
+                    type="button"
                     onClick={handleSubmitAd}
                     disabled={isSubmitting}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 py-2.5 px-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition shadow"
+                    className="bg-[#5046E5] hover:bg-indigo-700 text-white font-bold text-sm px-8 py-3 rounded-2xl flex items-center gap-2 shadow-md transition-all active:scale-[0.98]"
                   >
                     {isSubmitting ? (
                       <span>Publishing listing...</span>
@@ -787,12 +1015,12 @@ export const PostAdWizard: React.FC = () => {
                   </button>
                 )}
               </div>
-
             </div>
 
           </div>
 
         </div>
       </div>
+    </div>
   );
 };

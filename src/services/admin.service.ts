@@ -59,6 +59,8 @@ export interface AuditLog {
   createdAt: string;
 }
 
+
+
 export class AdminService {
   /**
    * Get Admin Dashboard metrics from GET /api/v2/admin/dashboard
@@ -245,23 +247,102 @@ export class AdminService {
       const response = await apiClient.get<ApiResponse<any>>('/admin/categories');
       return response.data || [];
     } catch {
-      return [];
+      try {
+        const response = await apiClient.get<ApiResponse<any>>('/categories');
+        return response.data || [];
+      } catch {
+        return [];
+      }
     }
   }
 
   static async createCategory(data: any): Promise<any> {
-    const response = await apiClient.post<ApiResponse<any>>('/admin/categories', data);
-    return response.data;
+    try {
+      const response = await apiClient.post<ApiResponse<any>>('/admin/categories', data);
+      return response.data;
+    } catch {
+      const response = await apiClient.post<ApiResponse<any>>('/categories', data);
+      return response.data;
+    }
   }
 
   static async updateCategory(id: string | number, data: any): Promise<any> {
-    const response = await apiClient.patch<ApiResponse<any>>(`/admin/categories/${id}`, data);
-    return response.data;
+    try {
+      const response = await apiClient.patch<ApiResponse<any>>(`/admin/categories/${id}`, data);
+      return response.data;
+    } catch {
+      const response = await apiClient.patch<ApiResponse<any>>(`/categories/${id}`, data);
+      return response.data;
+    }
   }
 
   static async deleteCategory(id: string | number): Promise<any> {
-    const response = await apiClient.delete<ApiResponse<any>>(`/admin/categories/${id}`);
-    return response.data;
+    try {
+      const response = await apiClient.delete<ApiResponse<any>>(`/admin/categories/${id}`);
+      return response.data;
+    } catch {
+      const response = await apiClient.delete<ApiResponse<any>>(`/categories/${id}`);
+      return response.data;
+    }
+  }
+
+  static async getFilters(): Promise<any[]> {
+    try {
+      const response = await apiClient.get<ApiResponse<any>>('/admin/filters');
+      return response.data || [];
+    } catch {
+      try {
+        const response = await apiClient.get<ApiResponse<any>>('/filters');
+        return response.data || [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
+  static async createFilter(data: any): Promise<any> {
+    try {
+      const response = await apiClient.post<ApiResponse<any>>('/admin/filters', data);
+      return response.data;
+    } catch {
+      const response = await apiClient.post<ApiResponse<any>>('/filters', data);
+      return response.data;
+    }
+  }
+
+  static async addFilterOption(filterId: string | number, data: any): Promise<any> {
+    try {
+      const response = await apiClient.post<ApiResponse<any>>(`/admin/filters/${filterId}/options`, data);
+      return response.data;
+    } catch {
+      const response = await apiClient.post<ApiResponse<any>>(`/filters/${filterId}/options`, data);
+      return response.data;
+    }
+  }
+
+  static async assignCategoryFilter(category: string | number, filterIds: any): Promise<any> {
+    const payload = Array.isArray(filterIds) ? { filter_ids: filterIds } : (typeof filterIds === 'object' ? filterIds : { filter_id: filterIds });
+    try {
+      const response = await apiClient.post<ApiResponse<any>>(`/admin/categories/${category}/filters`, payload);
+      return response.data;
+    } catch {
+      const response = await apiClient.post<ApiResponse<any>>(`/categories/${category}/filters`, payload);
+      return response.data;
+    }
+  }
+
+  static async getCategoryFilters(category: string | number): Promise<any[]> {
+    try {
+      const response = await apiClient.get<ApiResponse<any>>(`/admin/categories/${category}/filters`);
+      return response.data || [];
+    } catch {
+      try {
+        const response = await apiClient.get<ApiResponse<any>>(`/categories/${category}/filters`);
+        return response.data || [];
+      } catch {
+        return [];
+      }
+    }
   }
 
   static async getAuditLogs(): Promise<any> {
@@ -278,7 +359,38 @@ export const adminDashboardService = {
   getStats: () => AdminService.getMetrics(),
   getMetrics: () => AdminService.getMetrics(),
   getOverviewMetrics: () => AdminService.getMetrics(),
-  getAnalyticsData: () => Promise.resolve({ totalViews: 12500, topLocations: [], topCategories: [] }),
+  getAnalyticsData: () => Promise.resolve({
+    totalViews: 12500,
+    revenueLedger: [
+      { name: 'Mon', revenue: 12000 },
+      { name: 'Tue', revenue: 18500 },
+      { name: 'Wed', revenue: 15000 },
+      { name: 'Thu', revenue: 24000 },
+      { name: 'Fri', revenue: 29000 },
+      { name: 'Sat', revenue: 35000 },
+      { name: 'Sun', revenue: 42000 }
+    ],
+    categoriesShare: [
+      { name: 'Call Girls', value: 45 },
+      { name: 'Massage', value: 30 },
+      { name: 'Escorts', value: 15 },
+      { name: 'VIP Clubs', value: 10 }
+    ],
+    cityDemographics: [
+      { name: 'Mumbai', ads: 120 },
+      { name: 'Delhi', ads: 98 },
+      { name: 'Bangalore', ads: 85 },
+      { name: 'Hyderabad', ads: 64 },
+      { name: 'Goa', ads: 42 }
+    ],
+    userGrowth: [
+      { name: 'Mon', advertisers: 14, moderators: 1 },
+      { name: 'Tue', advertisers: 22, moderators: 2 },
+      { name: 'Wed', advertisers: 18, moderators: 1 },
+      { name: 'Thu', advertisers: 29, moderators: 2 },
+      { name: 'Fri', advertisers: 35, moderators: 3 }
+    ]
+  }),
 };
 
 export const adminAdService = {
@@ -350,10 +462,109 @@ export const adminBusinessService = {
   addCategory: (data: any) => AdminService.createCategory(data),
   updateCategory: (id: string | number, data: any) => AdminService.updateCategory(id, data),
   deleteCategory: (id: string | number) => AdminService.deleteCategory(id),
+  getFilters: () => AdminService.getFilters(),
+  createFilter: (data: any) => AdminService.createFilter(data),
+  addFilterOption: (filterId: string | number, data: any) => AdminService.addFilterOption(filterId, data),
+  assignCategoryFilter: (category: string | number, filterIds: any) => AdminService.assignCategoryFilter(category, filterIds),
   getLocations: () => apiClient.get<ApiResponse<any>>('/locations/cities').then((r) => r.data || []),
-  addLocation: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations', data).then((r) => r.data),
-  getFilters: () => apiClient.get<ApiResponse<any>>('/admin/filters').then((r) => r.data || []),
-  addFilterOption: (filterId: string | number, data: any) => apiClient.post<ApiResponse<any>>(`/admin/filters/${filterId}/options`, data).then((r) => r.data),
+  addLocation: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/cities', data).then((r) => r.data),
+  getCountries: () => apiClient.get<ApiPaginatedResponse<any>>('/admin/locations/countries').then((r) => r.data || []),
+  createCountry: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/countries', data).then((r) => r.data),
+  updateCountry: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/countries/${id}`, data).then((r) => r.data),
+  deleteCountry: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/countries/${id}`).then((r) => r.data),
+  getStates: (countryId?: string | number) => apiClient.get<ApiPaginatedResponse<any>>(`/admin/locations/regions${countryId ? `?country_id=${countryId}` : ''}`).then((r) => r.data || []),
+  createState: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/regions', data).then((r) => r.data),
+  updateState: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/regions/${id}`, data).then((r) => r.data),
+  deleteState: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/regions/${id}`).then((r) => r.data),
+  getCitiesByState: (stateId?: string | number) => apiClient.get<ApiPaginatedResponse<any>>(`/admin/locations/cities${stateId ? `?region_id=${stateId}` : ''}`).then((r) => r.data || []),
+  createCity: (data: { name: string; region_id: number; pincode?: string; slug?: string; image?: string }) => apiClient.post<ApiResponse<any>>('/admin/locations/cities', data).then((r) => r.data),
+  updateCity: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/cities/${id}`, data).then((r) => r.data),
+  deleteCity: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/cities/${id}`).then((r) => r.data),
+  getAreas: (cityId?: string | number) => apiClient.get<ApiPaginatedResponse<any>>(`/admin/locations/areas${cityId ? `?city_id=${cityId}` : ''}`).then((r) => r.data || []),
+  createArea: (data: { name: string; city_id: number; pincode?: string; slug?: string }) => apiClient.post<ApiResponse<any>>('/admin/locations/areas', data).then((r) => r.data),
+  updateArea: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/areas/${id}`, data).then((r) => r.data),
+  deleteArea: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/areas/${id}`).then((r) => r.data),
+};
+
+export const adminLocationService = {
+  // Country APIs
+  getCountries: async (params?: Record<string, any>) => {
+    try {
+      const r = await apiClient.get<any>('/admin/locations/countries', params);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    } catch {
+      const r = await apiClient.get<any>('/locations/countries', params);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    }
+  },
+  getCountry: (id: string | number) => apiClient.get<ApiResponse<any>>(`/admin/locations/countries/${id}`).then((r) => r.data),
+  createCountry: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/countries', data).then((r) => r.data),
+  updateCountry: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/countries/${id}`, data).then((r) => r.data),
+  deleteCountry: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/countries/${id}`).then((r) => r.data),
+
+  // Region / State APIs
+  getRegions: async (countryId?: string | number) => {
+    const url = countryId ? `/admin/locations/regions?country_id=${countryId}` : '/admin/locations/regions';
+    try {
+      const r = await apiClient.get<any>(url);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    } catch {
+      const pubUrl = countryId ? `/locations/regions?country_id=${countryId}` : '/locations/regions';
+      const r = await apiClient.get<any>(pubUrl);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    }
+  },
+  getRegion: (id: string | number) => apiClient.get<ApiResponse<any>>(`/admin/locations/regions/${id}`).then((r) => r.data),
+  createRegion: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/regions', data).then((r) => r.data),
+  updateRegion: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/regions/${id}`, data).then((r) => r.data),
+  deleteRegion: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/regions/${id}`).then((r) => r.data),
+
+  // City APIs (with Pincode)
+  getCities: async (regionId?: string | number, countryId?: string | number) => {
+    let url = '/admin/locations/cities';
+    const params: string[] = [];
+    if (regionId) params.push(`region_id=${regionId}`);
+    if (countryId) params.push(`country_id=${countryId}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
+
+    try {
+      const r = await apiClient.get<any>(url);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    } catch {
+      let pubUrl = '/locations/cities';
+      if (params.length > 0) pubUrl += `?${params.join('&')}`;
+      const r = await apiClient.get<any>(pubUrl);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    }
+  },
+  getCity: (id: string | number) => apiClient.get<ApiResponse<any>>(`/admin/locations/cities/${id}`).then((r) => r.data),
+  createCity: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/cities', data).then((r) => r.data),
+  updateCity: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/cities/${id}`, data).then((r) => r.data),
+  deleteCity: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/cities/${id}`).then((r) => r.data),
+
+  // Area / Locality APIs
+  getAreas: async (cityId?: string | number, regionId?: string | number, countryId?: string | number) => {
+    let url = '/admin/locations/areas';
+    const params: string[] = [];
+    if (cityId) params.push(`city_id=${cityId}`);
+    if (regionId) params.push(`region_id=${regionId}`);
+    if (countryId) params.push(`country_id=${countryId}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
+
+    try {
+      const r = await apiClient.get<any>(url);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    } catch {
+      let pubUrl = '/locations/areas';
+      if (params.length > 0) pubUrl += `?${params.join('&')}`;
+      const r = await apiClient.get<any>(pubUrl);
+      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+    }
+  },
+  getArea: (id: string | number) => apiClient.get<ApiResponse<any>>(`/admin/locations/areas/${id}`).then((r) => r.data),
+  createArea: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/areas', data).then((r) => r.data),
+  updateArea: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/areas/${id}`, data).then((r) => r.data),
+  deleteArea: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/areas/${id}`).then((r) => r.data),
 };
 
 export const adminSeoService = {

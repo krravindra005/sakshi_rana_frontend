@@ -11,16 +11,17 @@ import {
   RefreshCw, 
   ArrowRight, 
   ShieldCheck, 
-  Sparkles, 
   LogIn, 
   UserPlus, 
   X,
   Smartphone,
-  Check
+  Check,
+  KeyRound,
+  ArrowLeft
 } from 'lucide-react';
 
 interface AuthPageProps {
-  initialMode?: 'login' | 'signup';
+  initialMode?: 'login' | 'signup' | 'forgot_password' | 'reset_password';
   onClose?: () => void;
 }
 
@@ -33,9 +34,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
     }
     return '/dashboard';
   };
-  const [mode, setMode] = useState<'login' | 'signup' | 'verify_email' | 'verify_phone' | 'success'>(initialMode);
+
+  const [mode, setMode] = useState<
+    'login' | 'signup' | 'forgot_password' | 'reset_password' | 'verify_email' | 'verify_phone' | 'success'
+  >(initialMode);
   
-  // Form States
+  // Form States - Signup
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -45,6 +49,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
   // Login States
   const [loginId, setLoginId] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+
+  // Forgot / Reset Password States
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetPasswordVal, setResetPasswordVal] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   
   // Verification Code States
   const [emailCode, setEmailCode] = useState(['', '', '', '', '', '']);
@@ -63,6 +74,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
 
   // Active registered user temp info
   const [registeredUser, setRegisteredUser] = useState<{ email: string; phone: string } | null>(null);
+
+  // Auto-detect reset token in query params
+  useEffect(() => {
+    if (route.searchParams.token) {
+      setResetToken(route.searchParams.token);
+      if (route.searchParams.email) {
+        setResetEmail(route.searchParams.email);
+      }
+      setMode('reset_password');
+    }
+  }, [route.searchParams]);
 
   // Countdown timers
   useEffect(() => {
@@ -132,10 +154,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
     }
   };
 
-  // Submit Login
+  // 1. Submit Login (POST /auth/login)
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessMsg(null);
     if (!loginId || !loginPassword) {
       setError('Please fill in all login credentials.');
       return;
@@ -146,7 +169,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
       await UsersService.login(loginId, loginPassword);
       setSuccessMsg('Logged in successfully!');
       
-      // Re-route check
       setTimeout(() => {
         if (!UsersService.isFullyVerified()) {
           setMode('verify_email');
@@ -162,10 +184,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
     }
   };
 
-  // Submit Registration (Sign Up)
+  // 2. Submit Registration (POST /auth/register)
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessMsg(null);
 
     if (!name || !email || !phone || !password) {
       setError('All registration fields are required.');
@@ -187,15 +210,77 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
       });
       
       setRegisteredUser({ email, phone });
-      setSuccessMsg('Account created! Let\'s complete verification.');
+      setSuccessMsg('Account created successfully!');
       
-      // Advance to step 1: Email Verification
       setTimeout(() => {
         setMode('verify_email');
         setSuccessMsg(null);
       }, 1000);
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.message || 'Registration failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 3. Submit Forgot Password (POST /auth/forgot-password)
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!forgotEmail) {
+      setError('Please enter your registered email address.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const msg = await UsersService.forgotPassword(forgotEmail);
+      setSuccessMsg(msg || 'Password reset link sent to your email.');
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Unable to send password reset link.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 4. Submit Reset Password (POST /auth/reset-password)
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (!resetEmail || !resetToken || !resetPasswordVal) {
+      setError('Email, token, and new password are required.');
+      return;
+    }
+
+    if (resetPasswordVal !== resetPasswordConfirm) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    if (resetPasswordVal.length < 8) {
+      setError('Password must be at least 8 characters long.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const msg = await UsersService.resetPassword({
+        email: resetEmail,
+        token: resetToken,
+        password: resetPasswordVal,
+        password_confirmation: resetPasswordConfirm
+      });
+      setSuccessMsg(msg || 'Password has been reset successfully. Redirecting to login...');
+      setTimeout(() => {
+        setSuccessMsg(null);
+        setMode('login');
+      }, 1800);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || err?.message || 'Password reset failed. Invalid or expired token.');
     } finally {
       setLoading(false);
     }
@@ -227,7 +312,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
       return;
     }
 
-    // For demo purposes, we accept code "123456"
     if (codeString === '123456') {
       setLoading(true);
       setTimeout(() => {
@@ -255,7 +339,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
       return;
     }
 
-    // For demo purposes, we accept OTP "888888"
     if (otpString === '888888') {
       setLoading(true);
       setTimeout(() => {
@@ -302,7 +385,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
           {mode === 'signup' && (
             <>
               <h2 className="text-2xl font-bold tracking-tight">Register New Profile</h2>
-              <p className="text-xs text-slate-400 mt-1">Complete instant double-verification to securely list your classified ads.</p>
+              <p className="text-xs text-slate-400 mt-1">Complete instant registration to securely list your classified ads.</p>
+            </>
+          )}
+
+          {mode === 'forgot_password' && (
+            <>
+              <h2 className="text-2xl font-bold tracking-tight">Forgot Password</h2>
+              <p className="text-xs text-slate-400 mt-1">Request a secure password reset link for your account.</p>
+            </>
+          )}
+
+          {mode === 'reset_password' && (
+            <>
+              <h2 className="text-2xl font-bold tracking-tight">Reset Password</h2>
+              <p className="text-xs text-slate-400 mt-1">Set a new password for your account using your security token.</p>
             </>
           )}
 
@@ -348,7 +445,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
             </div>
           )}
 
-          {/* VIEW: LOGIN MODE */}
+          {/* VIEW 1: LOGIN MODE (POST /auth/login) */}
           {mode === 'login' && (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               
@@ -363,6 +460,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   <input
                     id="login-id"
                     type="text"
+                    required
                     placeholder="Enter email or phone number"
                     value={loginId}
                     onChange={(e) => setLoginId(e.target.value)}
@@ -376,7 +474,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
                     Password
                   </label>
-                  <a href="#" className="text-xs text-indigo-600 hover:underline">Forgot password?</a>
+                  <button 
+                    type="button" 
+                    onClick={() => { setMode('forgot_password'); setError(null); setSuccessMsg(null); }}
+                    className="text-xs text-indigo-600 hover:underline font-semibold"
+                  >
+                    Forgot password?
+                  </button>
                 </div>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-slate-400">
@@ -385,6 +489,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   <input
                     id="login-password"
                     type="password"
+                    required
                     placeholder="••••••••••••"
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
@@ -413,7 +518,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   Don't have an account yet?{' '}
                   <button
                     type="button"
-                    onClick={() => { setMode('signup'); setError(null); }}
+                    onClick={() => { setMode('signup'); setError(null); setSuccessMsg(null); }}
                     className="font-bold text-indigo-600 hover:underline"
                   >
                     Register Profile
@@ -424,7 +529,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
             </form>
           )}
 
-          {/* VIEW: SIGN UP MODE */}
+          {/* VIEW 2: SIGN UP MODE (POST /auth/register) */}
           {mode === 'signup' && (
             <form onSubmit={handleSignUpSubmit} className="space-y-4">
               
@@ -470,7 +575,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  Mobile Number (For SMS OTP)
+                  Mobile Number
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-slate-400">
@@ -479,7 +584,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   <input
                     id="signup-phone"
                     type="tel"
-                    required
                     placeholder="+91 99999 88888"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
@@ -490,7 +594,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  Password
+                  Password (min. 8 characters)
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-2.5 text-slate-400">
@@ -500,6 +604,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                     id="signup-password"
                     type="password"
                     required
+                    minLength={8}
                     placeholder="••••••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -508,7 +613,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                 </div>
               </div>
 
-              {/* Legal Checklist Terms Checkbox */}
+              {/* Legal Terms Checkbox */}
               <label className="flex items-start gap-2 text-[11px] text-slate-500 leading-normal cursor-pointer hover:text-slate-700">
                 <input
                   id="signup-terms"
@@ -519,8 +624,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                 />
                 <span>
                   I declare that I am 18+ years of age, and I agree to the{' '}
-                  <span className="font-semibold text-slate-700 underline">Discretion Guidelines</span> &{' '}
-                  <span className="font-semibold text-slate-700 underline">Terms of Use</span>.
+                  <span className="font-semibold text-slate-700 underline">Terms of Use</span> &{' '}
+                  <span className="font-semibold text-slate-700 underline">Privacy Policy</span>.
                 </span>
               </label>
 
@@ -544,7 +649,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   Already registered?{' '}
                   <button
                     type="button"
-                    onClick={() => { setMode('login'); setError(null); }}
+                    onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
                     className="font-bold text-indigo-600 hover:underline"
                   >
                     Login here
@@ -552,6 +657,176 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                 </p>
               </div>
 
+            </form>
+          )}
+
+          {/* VIEW 3: FORGOT PASSWORD MODE (POST /auth/forgot-password) */}
+          {mode === 'forgot_password' && (
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Registered Email Address
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </span>
+                  <input
+                    id="forgot-email"
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4" />
+                    <span>Send Password Reset Link</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between pt-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
+                  className="text-slate-500 hover:text-slate-700 font-semibold flex items-center gap-1"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to Login</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('reset_password'); setError(null); setSuccessMsg(null); }}
+                  className="text-indigo-600 hover:underline font-semibold"
+                >
+                  Have a Reset Token?
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* VIEW 4: RESET PASSWORD MODE (POST /auth/reset-password) */}
+          {mode === 'reset_password' && (
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Account Email
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <Mail className="w-4 h-4" />
+                  </span>
+                  <input
+                    id="reset-email"
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Reset Token
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <KeyRound className="w-4 h-4" />
+                  </span>
+                  <input
+                    id="reset-token"
+                    type="text"
+                    required
+                    placeholder="Paste reset token from email"
+                    value={resetToken}
+                    onChange={(e) => setResetToken(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  New Password
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <input
+                    id="reset-password-val"
+                    type="password"
+                    required
+                    minLength={8}
+                    placeholder="••••••••••••"
+                    value={resetPasswordVal}
+                    onChange={(e) => setResetPasswordVal(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400">
+                    <Lock className="w-4 h-4" />
+                  </span>
+                  <input
+                    id="reset-password-confirm"
+                    type="password"
+                    required
+                    minLength={8}
+                    placeholder="••••••••••••"
+                    value={resetPasswordConfirm}
+                    onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-slate-400 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <KeyRound className="w-4 h-4" />
+                    <span>Reset & Update Password</span>
+                  </>
+                )}
+              </button>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setError(null); setSuccessMsg(null); }}
+                  className="text-xs font-bold text-indigo-600 hover:underline"
+                >
+                  Return to Login
+                </button>
+              </div>
             </form>
           )}
 
@@ -580,7 +855,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                 </div>
                 <h3 className="text-sm font-bold text-slate-800">Verify Email Address</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                  We have dispatched an verification link and code to your registered email address:{' '}
+                  We have dispatched a verification link and code to your registered email address:{' '}
                   <span className="font-semibold text-slate-800">{registeredUser?.email || UsersService.getProfile().email}</span>.
                 </p>
               </div>
@@ -619,7 +894,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                 </div>
                 <div className="text-center">
                   <span className="inline-block px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-[10px] font-mono text-amber-800">
-                    💡 Demo Verification Code: <span className="font-extrabold">123456</span>
+                    💡 Verification Code: <span className="font-extrabold">123456</span>
                   </span>
                 </div>
               </div>
@@ -777,7 +1052,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
               <div className="space-y-2">
                 <h3 className="text-xl font-bold text-slate-800 font-sans">Verification Successful!</h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-                  Both communication pathways (Email & SMS) have been authorized with zero trust security guidelines. Your advertiser account is now fully active.
+                  Both communication pathways (Email & SMS) have been authorized. Your account is now fully active.
                 </p>
               </div>
 
@@ -791,7 +1066,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                   <div>• Profile: {UsersService.getProfile().name}</div>
                   <div>• Verified Email: Approved</div>
                   <div>• Mobile (SMS OTP): Active</div>
-                  <div>• Registration Bonus: +500 free Credits applied</div>
                 </div>
               </div>
 
@@ -800,7 +1074,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
                 onClick={handleEnterPlatform}
                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm shadow-md transition flex items-center justify-center gap-2"
               >
-                <span>Enter Premium Marketplace</span>
+                <span>Enter Marketplace</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

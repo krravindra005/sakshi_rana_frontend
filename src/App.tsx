@@ -38,6 +38,8 @@ import { AdsView } from './components/admin/AdsView';
 import { UsersView } from './components/admin/UsersView';
 import { ModerationView } from './components/admin/ModerationView';
 import { ReportsView } from './components/admin/ReportsView';
+import { CategoriesView } from './components/admin/CategoriesView';
+import { LocationsView } from './components/admin/LocationsView';
 import { BusinessView } from './components/admin/BusinessView';
 import { SeoView } from './components/admin/SeoView';
 import { SettingsView } from './components/admin/SettingsView';
@@ -93,18 +95,45 @@ function AppContent() {
     adminRole === 'Super Admin'
   );
 
+  // Synchronize adminRole state with real logged-in user role if available
+  useEffect(() => {
+    if (currentUser?.role || (currentUser?.roles && currentUser.roles.length > 0)) {
+      const roleName = currentUser.roles?.[0] || currentUser.role;
+      if (roleName === 'super_admin') setAdminRole('Super Admin');
+      else if (roleName === 'admin') setAdminRole('Admin');
+      else if (roleName === 'moderator') setAdminRole('Moderator');
+      else if (roleName === 'finance') setAdminRole('Finance');
+      else if (roleName === 'support') setAdminRole('Support');
+    }
+  }, [currentUser]);
+
+  // Route Guard Redirection Effect (Prevents setState-in-render warning)
+  useEffect(() => {
+    if (!isLoggedIn && (isUserProtectedRoute || isAdminRoute)) {
+      const currentFullUrl = window.location.pathname + window.location.search;
+      navigateTo(`/login?redirect=${encodeURIComponent(currentFullUrl)}`);
+    } else if (isAuthRoute && isLoggedIn && isVerified) {
+      const isUserAdmin = (
+        userRoles.includes('super_admin') ||
+        userRoles.includes('admin') ||
+        userRoles.includes('moderator') ||
+        userRoles.includes('finance') ||
+        userRoles.includes('support')
+      );
+      const defaultTarget = isUserAdmin ? '/admin/dashboard' : '/dashboard';
+      const redirectTarget = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : defaultTarget;
+      navigateTo(redirectTarget);
+    }
+  }, [isLoggedIn, isVerified, isUserProtectedRoute, isAdminRoute, isAuthRoute, route.searchParams.redirect, userRoles]);
+
   // 1. AUTHENTICATION ROUTE GUARD FOR PROTECTED USER ROUTES
   if (isUserProtectedRoute && !isLoggedIn) {
-    const currentFullUrl = window.location.pathname + window.location.search;
-    navigateTo(`/login?redirect=${encodeURIComponent(currentFullUrl)}`);
     return null;
   }
 
   // 2. AUTHENTICATION & AUTHORIZATION ROUTE GUARD FOR ADMIN ROUTES
   if (isAdminRoute) {
     if (!isLoggedIn) {
-      const currentFullUrl = window.location.pathname + window.location.search;
-      navigateTo(`/login?redirect=${encodeURIComponent(currentFullUrl)}`);
       return null;
     }
 
@@ -138,7 +167,7 @@ function AppContent() {
     // Admin layout render
     return (
       <AdminLayout activeRole={adminRole} setActiveRole={setAdminRole}>
-        {route.subPath === 'dashboard' && <DashboardView />}
+        {(route.subPath === 'dashboard' || !route.subPath) && <DashboardView onNavigateToTab={(tab) => navigateTo(`/admin/${tab}`)} />}
         {route.subPath === 'ads' && <AdsView activeRole={adminRole} />}
         {route.subPath === 'moderation' && <ModerationView />}
         {route.subPath === 'reports' && <ReportsView />}
@@ -149,10 +178,10 @@ function AppContent() {
           />
         )}
         {route.subPath === 'categories' && (
-          <div className="p-12 text-center bg-white rounded-2xl border border-[#E4E7EC] font-mono text-xs text-[#667085]">
-            <FolderTree className="mx-auto mb-3 text-rose-600 animate-bounce" size={32} />
-            Categories & dynamic attribute schemas config table (Vetted in Schema Foundation stage).
-          </div>
+          <CategoriesView activeRole={adminRole} />
+        )}
+        {route.subPath === 'locations' && (
+          <LocationsView activeRole={adminRole} />
         )}
         {(route.subPath === 'promotions' || route.subPath === 'payments' || route.subPath === 'wallet') && (
           <BusinessView activeRole={adminRole} />
@@ -166,8 +195,6 @@ function AppContent() {
   // 3. AUTH PAGE RENDER (/login or /register)
   if (isAuthRoute) {
     if (isLoggedIn && isVerified) {
-      const redirectTarget = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : '/dashboard';
-      navigateTo(redirectTarget);
       return null;
     }
 

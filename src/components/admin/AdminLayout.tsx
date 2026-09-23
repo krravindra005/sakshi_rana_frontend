@@ -8,6 +8,7 @@ import {
   ShieldAlert, 
   Users, 
   FolderTree, 
+  MapPin,
   DollarSign, 
   Search, 
   Settings, 
@@ -81,7 +82,8 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
     {
       title: 'CONFIGURATION',
       items: [
-        { id: 'categories', name: 'Categories & Filters', icon: FolderTree, roles: ['Super Admin', 'Admin'], permissions: ['categories.view', 'categories.manage'] }
+        { id: 'categories', name: 'Categories & Filters', icon: FolderTree, roles: ['Super Admin', 'Admin'], permissions: ['categories.view', 'categories.manage'] },
+        { id: 'locations', name: 'States & Cities', icon: MapPin, roles: ['Super Admin', 'Admin'], permissions: ['locations.view', 'locations.manage'] }
       ]
     },
     {

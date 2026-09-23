@@ -11,10 +11,11 @@ export class LocationsService {
   }
 
   /**
-   * Get states/regions by countryId from API V2
+   * Get states/regions (filtered by countryId if provided) from API V2
    */
-  static async getStatesByCountry(countryId: string | number): Promise<Region[]> {
-    const response = await apiClient.get<ApiResponse<Region[]>>(`/locations/regions?country_id=${countryId}`);
+  static async getStatesByCountry(countryId?: string | number): Promise<Region[]> {
+    const url = countryId ? `/locations/regions?country_id=${countryId}` : '/locations/regions';
+    const response = await apiClient.get<ApiResponse<Region[]>>(url);
     return response.data || [];
   }
 
@@ -42,10 +43,11 @@ export class LocationsService {
   }
 
   /**
-   * Get areas inside a specific city from API V2
+   * Get areas inside a specific city (or all active areas) from API V2
    */
-  static async getAreasByCity(cityId: string | number): Promise<Area[]> {
-    const response = await apiClient.get<ApiResponse<Area[]>>(`/locations/areas?city_id=${cityId}`);
+  static async getAreasByCity(cityId?: string | number): Promise<Area[]> {
+    const url = cityId ? `/locations/areas?city_id=${cityId}` : '/locations/areas';
+    const response = await apiClient.get<ApiResponse<Area[]>>(url);
     return response.data || [];
   }
 }
