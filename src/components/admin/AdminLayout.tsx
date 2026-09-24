@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { UsersService } from '../../services/users.service';
+import { PointsService } from '../../services/points.service';
 import { 
   Sparkles, 
   LayoutDashboard, 
@@ -52,10 +53,17 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const [pendingPointCount, setPendingPointCount] = useState<number>(0);
 
   const currentUser = UsersService.getProfile();
   const userPermissions = currentUser.permissions || [];
   const userRoles = currentUser.roles || (currentUser.role ? [currentUser.role] : []);
+
+  React.useEffect(() => {
+    PointsService.getAdminRequests('pending').then(res => {
+      if (res?.total !== undefined) setPendingPointCount(res.total);
+    }).catch(() => {});
+  }, []);
 
   // Define sidebar menu options grouped by domain with permission guards
   const menuGroups: SidebarGroup[] = [
@@ -89,6 +97,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
     {
       title: 'BUSINESS & FINANCE',
       items: [
+        { id: 'point-requests', name: 'Point Requests', icon: Coins, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['points.view', 'points.manage', 'wallet.adjust'], badge: pendingPointCount || undefined },
         { id: 'promotions', name: 'Promotions Catalog', icon: Sparkles, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['promotions.view', 'promotions.manage'] },
         { id: 'payments', name: 'Fiat Payments', icon: DollarSign, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['payments.view'] },
         { id: 'wallet', name: 'Wallet Ledger', icon: Coins, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['wallet.view', 'wallet.transactions'] }

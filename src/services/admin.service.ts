@@ -1,5 +1,17 @@
 import { apiClient, ApiResponse, ApiPaginatedResponse } from '../lib/api/client';
 import { mapApiAdToFrontendAd } from '../lib/mappers';
+import { Area } from '../types/api';
+import { PointsService } from './points.service';
+
+export interface AreaQueryParams {
+  city_id?: string | number;
+  region_id?: string | number;
+  country_id?: string | number;
+  is_active?: boolean | string;
+  q?: string;
+  page?: number;
+  per_page?: number;
+}
 
 export interface AdminReport {
   id: string;
@@ -463,6 +475,7 @@ export const adminBusinessService = {
   updateCategory: (id: string | number, data: any) => AdminService.updateCategory(id, data),
   deleteCategory: (id: string | number) => AdminService.deleteCategory(id),
   getFilters: () => AdminService.getFilters(),
+  getCategoryFilters: (category: string | number) => AdminService.getCategoryFilters(category),
   createFilter: (data: any) => AdminService.createFilter(data),
   addFilterOption: (filterId: string | number, data: any) => AdminService.addFilterOption(filterId, data),
   assignCategoryFilter: (category: string | number, filterIds: any) => AdminService.assignCategoryFilter(category, filterIds),
@@ -481,7 +494,7 @@ export const adminBusinessService = {
   updateCity: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/cities/${id}`, data).then((r) => r.data),
   deleteCity: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/cities/${id}`).then((r) => r.data),
   getAreas: (cityId?: string | number) => apiClient.get<ApiPaginatedResponse<any>>(`/admin/locations/areas${cityId ? `?city_id=${cityId}` : ''}`).then((r) => r.data || []),
-  createArea: (data: { name: string; city_id: number; pincode?: string; slug?: string }) => apiClient.post<ApiResponse<any>>('/admin/locations/areas', data).then((r) => r.data),
+  createArea: (data: { name: string; city_id: number; slug?: string }) => apiClient.post<ApiResponse<any>>('/admin/locations/areas', data).then((r) => r.data),
   updateArea: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/areas/${id}`, data).then((r) => r.data),
   deleteArea: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/areas/${id}`).then((r) => r.data),
 };
@@ -543,27 +556,62 @@ export const adminLocationService = {
   deleteCity: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/cities/${id}`).then((r) => r.data),
 
   // Area / Locality APIs
-  getAreas: async (cityId?: string | number, regionId?: string | number, countryId?: string | number) => {
+  getAreas: async (
+    paramsOrCityId?: AreaQueryParams | string | number,
+    regionId?: string | number,
+    countryId?: string | number
+  ): Promise<{ data: Area[]; meta?: { current_page: number; last_page: number; per_page: number; total: number } }> => {
     let url = '/admin/locations/areas';
     const params: string[] = [];
-    if (cityId) params.push(`city_id=${cityId}`);
-    if (regionId) params.push(`region_id=${regionId}`);
-    if (countryId) params.push(`country_id=${countryId}`);
+
+    if (paramsOrCityId && typeof paramsOrCityId === 'object') {
+      const p = paramsOrCityId as AreaQueryParams;
+      if (p.city_id && p.city_id !== 'all') params.push(`city_id=${p.city_id}`);
+      if (p.region_id && p.region_id !== 'all') params.push(`region_id=${p.region_id}`);
+      if (p.country_id && p.country_id !== 'all') params.push(`country_id=${p.country_id}`);
+      if (p.is_active !== undefined && p.is_active !== 'all') params.push(`is_active=${p.is_active}`);
+      if (p.q && p.q.trim()) params.push(`q=${encodeURIComponent(p.q.trim())}`);
+      if (p.page) params.push(`page=${p.page}`);
+      if (p.per_page) params.push(`per_page=${p.per_page}`);
+    } else {
+      if (paramsOrCityId && paramsOrCityId !== 'all') params.push(`city_id=${paramsOrCityId}`);
+      if (regionId && regionId !== 'all') params.push(`region_id=${regionId}`);
+      if (countryId && countryId !== 'all') params.push(`country_id=${countryId}`);
+    }
+
     if (params.length > 0) url += `?${params.join('&')}`;
 
     try {
       const r = await apiClient.get<any>(url);
-      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+      const items = Array.isArray(r.data) ? r.data : (r.data?.data || []);
+      const meta = r.meta || {
+        current_page: 1,
+        last_page: 1,
+        per_page: items.length || 20,
+        total: items.length,
+      };
+      return { data: items, meta };
     } catch {
       let pubUrl = '/locations/areas';
       if (params.length > 0) pubUrl += `?${params.join('&')}`;
-      const r = await apiClient.get<any>(pubUrl);
-      return Array.isArray(r.data) ? r.data : (r.data?.data || []);
+      try {
+        const r = await apiClient.get<any>(pubUrl);
+        const items = Array.isArray(r.data) ? r.data : (r.data?.data || []);
+        return {
+          data: items,
+          meta: r.meta || { current_page: 1, last_page: 1, per_page: items.length || 20, total: items.length },
+        };
+      } catch {
+        return {
+          data: [],
+          meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 },
+        };
+      }
     }
   },
-  getArea: (id: string | number) => apiClient.get<ApiResponse<any>>(`/admin/locations/areas/${id}`).then((r) => r.data),
-  createArea: (data: any) => apiClient.post<ApiResponse<any>>('/admin/locations/areas', data).then((r) => r.data),
-  updateArea: (id: string | number, data: any) => apiClient.patch<ApiResponse<any>>(`/admin/locations/areas/${id}`, data).then((r) => r.data),
+  getArea: (id: string | number) => apiClient.get<ApiResponse<Area>>(`/admin/locations/areas/${id}`).then((r) => r.data),
+  createArea: (data: any) => apiClient.post<ApiResponse<Area>>('/admin/locations/areas', data).then((r) => r.data),
+  updateArea: (id: string | number, data: any) => apiClient.patch<ApiResponse<Area>>(`/admin/locations/areas/${id}`, data).then((r) => r.data),
   deleteArea: (id: string | number) => apiClient.delete<ApiResponse<any>>(`/admin/locations/areas/${id}`).then((r) => r.data),
 };
 
@@ -584,4 +632,12 @@ export const adminSettingsService = {
 export const adminAuditService = {
   getLogs: () => AdminService.getAuditLogs(),
   getAuditLogs: () => AdminService.getAuditLogs(),
+};
+
+export const adminPointService = {
+  getRequests: (status?: string, page?: number, search?: string) => PointsService.getAdminRequests(status, page, search),
+  approveRequest: (id: number | string, adminNotes?: string) => PointsService.approveRequest(id, adminNotes),
+  rejectRequest: (id: number | string, reason?: string) => PointsService.rejectRequest(id, reason),
+  getSettings: () => PointsService.getAdPointSettings(),
+  updateSettings: (rate: number) => PointsService.updateAdPointSettings(rate),
 };

@@ -93,6 +93,15 @@ export interface Area {
   city_id: number;
   name: string;
   slug: string;
+  is_active?: boolean;
+  sort_order?: number;
+  city?: City & {
+    region?: Region & {
+      country?: Country;
+    };
+  };
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface MediaAsset {
@@ -168,10 +177,93 @@ export interface WalletTransaction {
   wallet_id: number;
   type: string;
   direction: 'credit' | 'debit';
+  status?: 'pending' | 'approved' | 'rejected' | 'completed';
   amount: number;
-  balance_after: number;
+  balance_before?: number;
+  balance_after?: number;
+  reference_type?: string;
+  reference_id?: string | number;
   description?: string;
+  metadata?: any;
+  created_by?: number;
+  creator_name?: string;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+  };
   created_at: string;
+}
+
+export interface PointRequest {
+  id: number;
+  uuid: string;
+  user_id: number;
+  points: number;
+  reason?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewed_by?: number;
+  reviewed_at?: string;
+  admin_notes?: string;
+  wallet_transaction_id?: number;
+  created_at: string;
+  updated_at?: string;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    role?: string;
+    current_balance?: number;
+  };
+  reviewer?: {
+    id: number;
+    name: string;
+    email: string;
+  };
+  wallet_transaction?: WalletTransaction;
+}
+
+export interface AdPointRequirements {
+  available_points: number;
+  daily_points_required: number;
+  user_daily_burn_rate: number;
+  points_already_used: number;
+  remaining_points: number;
+  estimated_days_remaining: number;
+  active_ads_count: number;
+  total_ads_count: number;
+}
+
+export interface AdminPointStats {
+  total_requests: number;
+  pending_requests: number;
+  approved_requests: number;
+  rejected_requests: number;
+  total_points_requested: number;
+  total_points_approved: number;
+  total_points_credited: number;
+  total_points_debited: number;
+  daily_rate: number;
+  active_ads_consuming_points: number;
+}
+
+export interface ActiveAdPointUsage {
+  id: number;
+  uuid: string;
+  title: string;
+  status: string;
+  paused_at?: string;
+  daily_points_rate: number;
+  points_consumed_total: number;
+  last_point_debited_at?: string;
+  points_depleted_reason?: string;
+  user?: {
+    id: number;
+    name: string;
+    email: string;
+    current_balance: number;
+    days_remaining: number;
+  };
 }
 
 export interface PromotionProduct {

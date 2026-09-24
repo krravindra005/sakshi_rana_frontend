@@ -23,8 +23,19 @@ import {
   Smartphone,
   ChevronRight,
   ListFilter,
-  DollarSign
+  DollarSign,
+  Clock,
+  ArrowUpRight,
+  ArrowDownRight,
+  Send,
+  Flame,
+  Coins,
+  CheckCircle2,
+  XCircle,
+  X
 } from 'lucide-react';
+import { PointsService } from '../../services/points.service';
+import { PointRequest, AdPointRequirements } from '../../types/api';
 
 interface UserDashboardProps {
   initialTab?: string;
@@ -42,6 +53,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [wallet, setWallet] = useState<UserWallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
+  
+  // Point Requests & Ad Point Requirements
+  const [pointRequests, setPointRequests] = useState<PointRequest[]>([]);
+  const [adPointStats, setAdPointStats] = useState<AdPointRequirements | null>(null);
+  const [fundingMode, setFundingMode] = useState<'request' | 'topup'>('request');
+  const [requestPointsAmount, setRequestPointsAmount] = useState('500');
+  const [requestPointsReason, setRequestPointsReason] = useState('');
+  const [isSubmittingPointRequest, setIsSubmittingPointRequest] = useState(false);
+  const [pointRequestFeedback, setPointRequestFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [ledgerFilter, setLedgerFilter] = useState<'all' | 'credit' | 'debit'>('all');
   
   // Wallet top-up form
   const [topUpAmount, setTopUpAmount] = useState('1000');
@@ -83,13 +104,36 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             id: String(tx.id || tx.uuid),
             amount: Number(tx.amount || 0),
             type: tx.type || 'deposit',
+            direction: tx.direction || (tx.type === 'deposit' || tx.type === 'admin_credit' ? 'credit' : 'debit'),
             description: tx.description || 'Wallet transaction',
-            date: tx.created_at ? new Date(tx.created_at).toLocaleDateString('en-US') : 'Today',
-            status: tx.status || 'completed'
+            date: tx.created_at ? new Date(tx.created_at).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }) : 'Today',
+            status: tx.status || 'completed',
+            balance_before: tx.balance_before,
+            balance_after: tx.balance_after,
+            reference_id: tx.reference_id,
           })));
         }
       } catch {
         if (mounted) setTransactions(UsersService.getTransactions());
+      }
+
+      // Point Requests & Ad Stats
+      try {
+        const [reqs, adStats] = await Promise.all([
+          PointsService.getMyRequests(),
+          PointsService.getAdPointsRequirement(),
+        ]);
+        if (mounted) {
+          setPointRequests(reqs);
+          setAdPointStats(adStats);
+        }
+      } catch (err) {
+        console.error('Failed to load point stats:', err);
       }
 
       // User Ads
@@ -138,6 +182,61 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
       })));
       setTopUpAmount('1000');
       alert(`Credits Top Up Order Initialized! Amount: ${amount} credits.`);
+    }
+  };
+
+  const handlePointRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const points = parseFloat(requestPointsAmount);
+    if (!points || points <= 0) {
+      setPointRequestFeedback({ type: 'error', text: 'Please enter a valid points quantity greater than 0.' });
+      return;
+    }
+
+    try {
+      setIsSubmittingPointRequest(true);
+      setPointRequestFeedback(null);
+      await PointsService.submitRequest(points, requestPointsReason);
+      setPointRequestFeedback({
+        type: 'success',
+        text: `Point request for ${points} Points submitted successfully! Super Admin will review your request.`,
+      });
+      setRequestPointsReason('');
+
+      // Refresh data
+      const [reqs, adStats, w, txs] = await Promise.all([
+        PointsService.getMyRequests(),
+        PointsService.getAdPointsRequirement(),
+        WalletService.getWallet(),
+        WalletService.getTransactions()
+      ]);
+      setPointRequests(reqs);
+      setAdPointStats(adStats);
+      setWallet({ balance: w.balance || 0, currency: w.currency_code || 'Credits' });
+      setTransactions(txs.map((tx: any) => ({
+        id: String(tx.id || tx.uuid),
+        amount: Number(tx.amount || 0),
+        type: tx.type || 'deposit',
+        direction: tx.direction || (tx.type === 'deposit' || tx.type === 'admin_credit' ? 'credit' : 'debit'),
+        description: tx.description || 'Wallet transaction',
+        date: tx.created_at ? new Date(tx.created_at).toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : 'Today',
+        status: tx.status || 'completed',
+        balance_before: tx.balance_before,
+        balance_after: tx.balance_after,
+        reference_id: tx.reference_id,
+      })));
+    } catch (err: any) {
+      setPointRequestFeedback({
+        type: 'error',
+        text: err?.response?.data?.message || 'Failed to submit point request. Please try again.',
+      });
+    } finally {
+      setIsSubmittingPointRequest(false);
     }
   };
 
@@ -410,65 +509,403 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             {activeTab === 'wallet' && (
               <div className="space-y-6">
                 
-                {/* Balance cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-sm border border-slate-800 relative overflow-hidden">
-                    <div className="absolute right-0 top-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
-                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest font-mono">ADVERTISER CREDITS</span>
-                    <h3 className="text-3xl font-extrabold tracking-tight mt-1.5">{wallet?.balance} Credits</h3>
-                    <p className="text-[11px] text-slate-400 mt-2">Valued at 1 INR per Credit.</p>
+                {/* 1. TOP BALANCE & ACQUISITION DECK */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Left: Advertiser Credits Card (Matches Image 2) */}
+                  <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-sm border border-slate-800 relative overflow-hidden flex flex-col justify-between min-h-[180px]">
+                    <div className="absolute right-0 top-0 w-28 h-28 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+                    <div>
+                      <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest font-mono">
+                        ADVERTISER CREDITS
+                      </span>
+                      <h3 className="text-3xl font-extrabold tracking-tight mt-1.5 font-mono">
+                        {wallet?.balance ?? 0} Credits
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-2">Valued at 1 INR per Credit.</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+                      <span>Daily Burn:</span>
+                      <span className="font-bold text-amber-400">
+                        {adPointStats?.user_daily_burn_rate ?? adPointStats?.daily_points_required ?? 50} pts/day
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Add Credits form */}
-                  <div className="col-span-1 sm:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                    <h3 className="font-bold text-slate-900 text-sm mb-3">Deposit Advertising Credits</h3>
-                    <form onSubmit={handleTopUp} className="flex gap-3">
-                      <div className="flex-1 relative flex items-center border border-slate-200 rounded-xl bg-slate-50 px-3">
-                        <DollarSign className="w-4 h-4 text-slate-400 absolute left-3.5" />
-                        <input
-                          id="top-up-credits-input"
-                          type="number"
-                          required
-                          min="100"
-                          value={topUpAmount}
-                          onChange={(e) => setTopUpAmount(e.target.value)}
-                          className="w-full pl-6 py-2 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 text-slate-800 font-semibold"
-                          placeholder="Credits"
-                        />
+                  {/* Right: Dual Acquisition Form (Request Points from Admin / Top-up UPI) */}
+                  <div className="col-span-1 lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div className="flex bg-slate-100 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setFundingMode('request')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition ${
+                            fundingMode === 'request'
+                              ? 'bg-white text-indigo-600 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          Request Points from Admin
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFundingMode('topup')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold font-mono transition ${
+                            fundingMode === 'topup'
+                              ? 'bg-white text-indigo-600 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-900'
+                          }`}
+                        >
+                          Deposit Advertising Credits (UPI)
+                        </button>
                       </div>
+                      <span className="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">
+                        {fundingMode === 'request' ? 'Admin Grant' : 'Instant Top-Up'}
+                      </span>
+                    </div>
+
+                    {/* Mode A: Request Points from Super Admin */}
+                    {fundingMode === 'request' && (
+                      <form onSubmit={handlePointRequestSubmit} className="space-y-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[11px] font-semibold text-slate-500">Quick Select:</span>
+                          {[100, 500, 5000].map((amt) => (
+                            <button
+                              key={amt}
+                              type="button"
+                              onClick={() => setRequestPointsAmount(String(amt))}
+                              className={`px-2.5 py-1 text-xs font-mono font-bold rounded-lg border transition ${
+                                requestPointsAmount === String(amt)
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                              }`}
+                            >
+                              ${amt.toLocaleString()}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div className="relative flex items-center border border-slate-200 rounded-xl bg-slate-50 px-3 focus-within:border-indigo-500 focus-within:bg-white">
+                            <Coins className="w-4 h-4 text-slate-400 absolute left-3.5" />
+                            <input
+                              id="request-points-input"
+                              type="number"
+                              required
+                              min="1"
+                              max="100000"
+                              value={requestPointsAmount}
+                              onChange={(e) => setRequestPointsAmount(e.target.value)}
+                              className="w-full pl-6 py-2 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 text-slate-800 font-semibold"
+                              placeholder="Points (e.g. 500)"
+                            />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <input
+                              type="text"
+                              value={requestPointsReason}
+                              onChange={(e) => setRequestPointsReason(e.target.value)}
+                              placeholder="Purpose (e.g. 5-day Mumbai ad campaign)"
+                              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:bg-white focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                          <p className="text-[10px] text-slate-400">
+                            Submit point request for Super Admin review. Points credit automatically to your existing wallet upon approval.
+                          </p>
+                          <button
+                            type="submit"
+                            disabled={isSubmittingPointRequest}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 px-5 rounded-xl transition shadow flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0"
+                          >
+                            <Send size={13} />
+                            <span>{isSubmittingPointRequest ? 'Submitting...' : 'Submit Request'}</span>
+                          </button>
+                        </div>
+
+                        {pointRequestFeedback && (
+                          <div className={`p-2.5 rounded-xl text-xs font-mono font-medium flex items-center gap-2 ${
+                            pointRequestFeedback.type === 'success' 
+                              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' 
+                              : 'bg-rose-50 text-rose-800 border border-rose-200'
+                          }`}>
+                            {pointRequestFeedback.type === 'success' ? (
+                              <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                            ) : (
+                              <XCircle size={14} className="text-rose-600 shrink-0" />
+                            )}
+                            <span>{pointRequestFeedback.text}</span>
+                          </div>
+                        )}
+                      </form>
+                    )}
+
+                    {/* Mode B: Direct UPI Top-up (Matches Image 2 exactly) */}
+                    {fundingMode === 'topup' && (
+                      <div>
+                        <h3 className="font-bold text-slate-900 text-sm mb-3">Deposit Advertising Credits</h3>
+                        <form onSubmit={handleTopUp} className="flex gap-3">
+                          <div className="flex-1 relative flex items-center border border-slate-200 rounded-xl bg-slate-50 px-3">
+                            <DollarSign className="w-4 h-4 text-slate-400 absolute left-3.5" />
+                            <input
+                              id="top-up-credits-input"
+                              type="number"
+                              required
+                              min="100"
+                              value={topUpAmount}
+                              onChange={(e) => setTopUpAmount(e.target.value)}
+                              className="w-full pl-6 py-2 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 text-slate-800 font-semibold"
+                              placeholder="Credits"
+                            />
+                          </div>
+                          <button
+                            id="btn-topup-submit"
+                            type="submit"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2.5 px-6 rounded-xl transition shadow"
+                          >
+                            Top-up UPI
+                          </button>
+                        </form>
+                        <p className="text-[10px] text-slate-400 mt-2">Instant credit deposits. Accepted via all major UPI, Netbanking, and Wallets.</p>
+                      </div>
+                    )}
+
+                  </div>
+
+                </div>
+
+                {/* 2. ADVERTISEMENT POINTS CONSUMPTION & RUNWAY CARD */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-amber-500" />
+                        <span>Daily Advertisement Points Consumption</span>
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Active advertisements consume daily points automatically according to the configured system rate.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 w-fit">
+                      Rate: {adPointStats?.daily_points_required ?? 50} Points / Day
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Available Points</span>
+                      <span className="text-xl font-mono font-extrabold text-slate-900">
+                        {wallet?.balance ?? 0}
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Daily Points Required</span>
+                      <span className="text-xl font-mono font-extrabold text-indigo-600">
+                        {adPointStats?.daily_points_required ?? 50} <span className="text-xs font-normal text-slate-400">/ ad</span>
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Points Already Used</span>
+                      <span className="text-xl font-mono font-extrabold text-slate-600">
+                        {adPointStats?.points_already_used ?? 0}
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Remaining Ad Runway</span>
+                      <span className={`text-xl font-mono font-extrabold ${
+                        (adPointStats?.estimated_days_remaining ?? 0) > 3 ? 'text-emerald-600' : 'text-amber-600'
+                      }`}>
+                        ~{adPointStats?.estimated_days_remaining ?? 0} <span className="text-xs font-normal text-slate-400">Days</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Runway advice alert */}
+                  <div className={`p-3 rounded-xl text-xs font-mono flex items-center justify-between gap-3 ${
+                    (wallet?.balance ?? 0) >= (adPointStats?.daily_points_required ?? 50)
+                      ? 'bg-emerald-50/70 border border-emerald-100 text-emerald-800'
+                      : 'bg-amber-50/70 border border-amber-100 text-amber-800'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${
+                        (wallet?.balance ?? 0) >= (adPointStats?.daily_points_required ?? 50) ? 'bg-emerald-500' : 'bg-amber-500'
+                      }`} />
+                      <span>
+                        {(wallet?.balance ?? 0) >= (adPointStats?.daily_points_required ?? 50)
+                          ? `You have sufficient point balance for ~${adPointStats?.estimated_days_remaining ?? 0} continuous publication days.`
+                          : 'Your point balance is below the daily running rate. Request points or deposit credits to ensure your ads are not paused.'}
+                      </span>
+                    </div>
+                    {fundingMode !== 'request' && (
                       <button
-                        id="btn-topup-submit"
-                        type="submit"
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2.5 px-6 rounded-xl transition shadow"
+                        onClick={() => setFundingMode('request')}
+                        className="underline font-bold hover:opacity-80 shrink-0"
                       >
-                        Top-up UPI
+                        Request Points &rarr;
                       </button>
-                    </form>
-                    <p className="text-[10px] text-slate-400 mt-2">Instant credit deposits. Accepted via all major UPI, Netbanking, and Wallets.</p>
+                    )}
                   </div>
                 </div>
 
-                {/* Ledger list */}
-                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                  <h3 className="font-bold text-slate-950 text-base pb-3 border-b border-slate-100 mb-4">Transactions Ledger Logs</h3>
+                {/* 3. MY POINT REQUESTS TABLE */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div>
+                      <h3 className="font-bold text-slate-950 text-base">My Point Requests to Super Admin</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Track point allocation ticket statuses and review outcomes</p>
+                    </div>
+                    <span className="text-xs font-mono text-slate-400 font-semibold">
+                      {pointRequests.length} Requests
+                    </span>
+                  </div>
+
+                  {pointRequests.length === 0 ? (
+                    <div className="text-center py-8 text-xs text-slate-400 font-mono space-y-2">
+                      <Coins className="w-8 h-8 text-slate-300 mx-auto" />
+                      <p>You haven't requested any points from the Super Admin yet.</p>
+                      <button
+                        onClick={() => { setFundingMode('request'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="text-indigo-600 font-bold hover:underline"
+                      >
+                        Submit your first Point Request &uarr;
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pointRequests.map((req) => (
+                        <div 
+                          key={req.id} 
+                          className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 text-sm">
+                                {Number(req.points).toLocaleString()} Points
+                              </span>
+                              {req.status === 'pending' && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Pending Review
+                                </span>
+                              )}
+                              {req.status === 'approved' && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Check size={11} className="text-emerald-600" />
+                                  Approved & Credited
+                                </span>
+                              )}
+                              {req.status === 'rejected' && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold font-mono px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                  <X size={11} className="text-rose-600" />
+                                  Declined
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-slate-600 mt-1">
+                              {req.reason || 'General campaign points request'}
+                            </p>
+
+                            <div className="text-[10px] text-slate-400 font-mono mt-1 flex flex-wrap gap-2">
+                              <span>Submitted: {req.created_at ? new Date(req.created_at).toLocaleDateString() : 'Today'}</span>
+                              <span>&bull;</span>
+                              <span>Ticket #{req.id}</span>
+                              {req.admin_notes && (
+                                <>
+                                  <span>&bull;</span>
+                                  <span className="italic text-slate-500">Admin: {req.admin_notes}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            {req.status === 'approved' && (
+                              <span className="font-mono font-bold text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100">
+                                +{req.points} Credited
+                              </span>
+                            )}
+                            {req.status === 'pending' && (
+                              <span className="text-[11px] text-slate-400 font-mono">
+                                Awaiting Admin
+                              </span>
+                            )}
+                            {req.status === 'rejected' && (
+                              <span className="text-[11px] text-rose-500 font-mono font-medium">
+                                Not Credited
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. TRANSACTIONS LEDGER LOGS (Matches Image 2 heading & layout) */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-2">
+                    <h3 className="font-bold text-slate-950 text-base">Transactions Ledger Logs</h3>
+                    
+                    {/* Direction filter pills */}
+                    <div className="flex gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200/60">
+                      {(['all', 'credit', 'debit'] as const).map((dir) => (
+                        <button
+                          key={dir}
+                          onClick={() => setLedgerFilter(dir)}
+                          className={`px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold capitalize transition ${
+                            ledgerFilter === dir
+                              ? 'bg-white text-indigo-600 shadow-xs'
+                              : 'text-slate-400 hover:text-slate-700'
+                          }`}
+                        >
+                          {dir === 'all' ? 'All Moves' : dir === 'credit' ? '+ Credits' : '- Debits'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   
-                  <div className="space-y-3.5 max-h-80 overflow-y-auto pr-1">
-                    {transactions.map((tx) => (
-                      <div key={tx.id} className="flex justify-between items-center text-xs pb-3 border-b border-slate-50 last:border-0">
-                        <div>
-                          <p className="font-bold text-slate-800">{tx.description}</p>
-                          <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">{tx.date} &bull; ID: {tx.id}</span>
+                  <div className="space-y-3.5 max-h-96 overflow-y-auto pr-1">
+                    {transactions
+                      .filter((tx) => ledgerFilter === 'all' || tx.direction === ledgerFilter)
+                      .map((tx) => (
+                        <div key={tx.id} className="flex justify-between items-center text-xs pb-3 border-b border-slate-50 last:border-0">
+                          <div>
+                            <p className="font-bold text-slate-800">{tx.description}</p>
+                            <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                              {tx.date} &bull; ID: {tx.id}
+                              {tx.balance_before !== undefined && tx.balance_after !== undefined && (
+                                <> &bull; Bal: {tx.balance_before} &rarr; {tx.balance_after} Credits</>
+                              )}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className={`font-mono font-bold text-sm ${
+                              tx.direction === 'credit' || tx.type === 'deposit' || tx.type === 'admin_credit'
+                                ? 'text-emerald-600'
+                                : 'text-rose-600'
+                            }`}>
+                              {tx.direction === 'credit' || tx.type === 'deposit' || tx.type === 'admin_credit' ? '+' : '-'}
+                              {tx.amount} Credits
+                            </span>
+                            <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 block rounded-md mt-1 w-fit ml-auto">
+                              {tx.status}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <span className={`font-mono font-bold text-sm ${tx.type === 'deposit' ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {tx.type === 'deposit' ? '+' : '-'}{tx.amount} Credits
-                          </span>
-                          <span className="text-[9px] font-semibold text-emerald-500 bg-emerald-50 border border-emerald-100 px-1.5 py-0.2 block rounded-md mt-1 w-fit ml-auto">
-                            {tx.status}
-                          </span>
-                        </div>
+                      ))}
+
+                    {transactions.length === 0 && (
+                      <div className="py-8 text-center text-xs text-slate-400 font-mono">
+                        No transactions recorded yet.
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 

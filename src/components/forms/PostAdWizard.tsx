@@ -585,7 +585,7 @@ export const PostAdWizard: React.FC = () => {
                         >
                           {areasList.map((a) => (
                             <option key={a.id || a.slug} value={a.id}>
-                              {a.name} {a.pincode ? `(${a.pincode})` : ''}
+                              {a.name}
                             </option>
                           ))}
                         </select>

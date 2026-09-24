@@ -38,10 +38,15 @@ export type UserWallet = Wallet;
 export interface WalletTransaction {
   id: string;
   amount: number;
-  type: TransactionType;
+  type: string;
+  direction?: 'credit' | 'debit';
   description: string;
   date: string;
   status: 'completed' | 'pending' | 'failed';
+  balance_before?: number;
+  balance_after?: number;
+  reference_id?: string;
+  created_by?: string | number;
 }
 
 export interface Favorite {
