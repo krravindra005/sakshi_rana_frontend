@@ -9,10 +9,12 @@ export function mapApiAdToFrontendAd(apiAd: any): Ad {
   // Extract cover image or first image from media array
   const mediaList = Array.isArray(apiAd.media) ? apiAd.media : [];
   const coverMedia = mediaList.find((m: any) => m.is_cover) || mediaList[0];
-  const coverImageUrl = coverMedia?.thumbnail_path || coverMedia?.file_path || apiAd.profile_image || apiAd.cover_image || FALLBACK_PROFILE_IMAGE;
+  const coverImageUrl = coverMedia?.url || coverMedia?.path || coverMedia?.thumbnail_path || coverMedia?.file_path || apiAd.profile_image || apiAd.cover_image || FALLBACK_PROFILE_IMAGE;
   
-  const allImages = mediaList.map((m: any) => m.file_path).filter(Boolean);
-  if (allImages.length === 0 && coverImageUrl) {
+  const allImages = mediaList.map((m: any) => m.url || m.path || m.file_path).filter(Boolean);
+  if (allImages.length === 0 && coverImageUrl && coverImageUrl !== FALLBACK_PROFILE_IMAGE) {
+    allImages.push(coverImageUrl);
+  } else if (allImages.length === 0) {
     allImages.push(coverImageUrl);
   }
 

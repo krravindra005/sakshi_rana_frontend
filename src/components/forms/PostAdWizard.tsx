@@ -299,6 +299,7 @@ export const PostAdWizard: React.FC = () => {
       },
       attributes: adAttributes,
       services: selectedServices,
+      profile_image: images[coverImageIdx] || images[0] || null,
       images,
     };
 

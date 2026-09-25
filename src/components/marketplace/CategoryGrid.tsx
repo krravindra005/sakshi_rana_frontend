@@ -65,8 +65,8 @@ export const CategoryGrid: React.FC = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             {categories.map((cat) => {
-              const coverImage = cat.image_path || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600';
-              const activeCount = cat.ads_count ?? cat.active_ads_count ?? 0;
+              const coverImage = cat.cover_image || (cat as any).image_path || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600';
+              const activeCount = cat.listing_count ?? (cat as any).ads_count ?? (cat as any).active_ads_count ?? 0;
               return (
                 <div
                   key={cat.id}

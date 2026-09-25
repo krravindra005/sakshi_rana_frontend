@@ -183,6 +183,18 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ activeRole }) =>
     return Object.keys(errors).length === 0;
   };
 
+  const handleCategoryImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setFormData((prev) => ({ ...prev, cover_image: reader.result as string }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const resetForm = () => {
     setFormData({
       name: '',
@@ -917,20 +929,47 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ activeRole }) =>
                 </div>
               </div>
 
-              {/* Cover Image URL */}
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-700">Cover Image URL</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://images.unsplash.com/..."
-                    value={formData.cover_image}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, cover_image: e.target.value }))}
-                    className="w-full bg-[#F8F9FC] border border-[#E4E7EC] rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-rose-500"
-                  />
+              {/* Cover Image Upload / URL */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700">Category Cover Image</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 transition shrink-0 flex items-center gap-1.5">
+                      <ImageIcon size={14} />
+                      <span>Upload Image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleCategoryImageUpload}
+                      />
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Or paste image URL (https://...)"
+                      value={formData.cover_image.startsWith('data:image') ? '[Uploaded Image File]' : formData.cover_image}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, cover_image: e.target.value }))}
+                      className="w-full bg-[#F8F9FC] border border-[#E4E7EC] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-rose-500"
+                    />
+                    {formData.cover_image && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, cover_image: '' }))}
+                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                        title="Remove image"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
                   {formData.cover_image && (
-                    <div className="w-10 h-10 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-slate-100">
-                      <img src={formData.cover_image} alt="" className="w-full h-full object-cover" />
+                    <div className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="w-16 h-12 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-slate-100">
+                        <img src={formData.cover_image} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="text-xs text-slate-500 truncate flex-1">
+                        {formData.cover_image.startsWith('data:image') ? 'Custom image uploaded from disk' : formData.cover_image}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1095,19 +1134,47 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({ activeRole }) =>
                 </div>
               </div>
 
-              {/* Cover Image URL */}
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-700">Cover Image URL</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="url"
-                    value={formData.cover_image}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, cover_image: e.target.value }))}
-                    className="w-full bg-[#F8F9FC] border border-[#E4E7EC] rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:border-indigo-500"
-                  />
+              {/* Cover Image Upload / URL */}
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700">Category Cover Image</label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="cursor-pointer px-3 py-2 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 transition shrink-0 flex items-center gap-1.5">
+                      <ImageIcon size={14} />
+                      <span>Upload Image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleCategoryImageUpload}
+                      />
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Or paste image URL (https://...)"
+                      value={formData.cover_image.startsWith('data:image') ? '[Uploaded Image File]' : formData.cover_image}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, cover_image: e.target.value }))}
+                      className="w-full bg-[#F8F9FC] border border-[#E4E7EC] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                    {formData.cover_image && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, cover_image: '' }))}
+                        className="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                        title="Remove image"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
                   {formData.cover_image && (
-                    <div className="w-10 h-10 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-slate-100">
-                      <img src={formData.cover_image} alt="" className="w-full h-full object-cover" />
+                    <div className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="w-16 h-12 rounded-lg border border-slate-200 overflow-hidden shrink-0 bg-slate-100">
+                        <img src={formData.cover_image} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="text-xs text-slate-500 truncate flex-1">
+                        {formData.cover_image.startsWith('data:image') ? 'Custom image uploaded from disk' : formData.cover_image}
+                      </div>
                     </div>
                   )}
                 </div>
