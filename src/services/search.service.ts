@@ -51,20 +51,27 @@ export class SearchService {
     if (filters.area) {
       params.append('area', filters.area);
     }
+    if (filters.is_verified) {
+      params.append('is_verified', 'true');
+    }
+    if (filters.is_featured) {
+      params.append('is_featured', 'true');
+    }
     if (sortBy) {
       params.append('sort', sortBy);
     }
 
-    // Dynamic Filter arrays mapping: filters[key][]=val
-    const dynamicKeys = ['nationality', 'ethnicity', 'bodyType', 'hairColor', 'services', 'intendedAudience', 'placeOfService'];
-    dynamicKeys.forEach((key) => {
-      const values = (filters as any)[key];
+    // Dynamic Filter attributes mapping
+    Object.entries(filters).forEach(([key, values]) => {
+      if (['category', 'country', 'state', 'city', 'area', 'is_verified', 'is_featured'].includes(key)) {
+        return;
+      }
       if (Array.isArray(values)) {
         values.forEach((v) => {
-          params.append(`filters[${key}][]`, v);
+          if (v) params.append(`filters[${key}][]`, String(v));
         });
-      } else if (values) {
-        params.append(`filters[${key}][]`, values);
+      } else if (values !== undefined && values !== null && values !== '') {
+        params.append(`filters[${key}][]`, String(values));
       }
     });
 

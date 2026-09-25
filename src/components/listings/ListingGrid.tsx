@@ -49,17 +49,20 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
   // 1. Sync local filters state with URL query search parameters on load
   useEffect(() => {
     const filters: FilterOptions = {
-      category: categorySlug || undefined,
-      city: citySlug || undefined,
+      category: categorySlug || route.searchParams.category || undefined,
+      city: citySlug || route.searchParams.city || undefined,
       area: route.searchParams.area || undefined,
-      nationality: route.searchParams.nationality ? route.searchParams.nationality.split(',') : undefined,
-      ethnicity: route.searchParams.ethnicity ? route.searchParams.ethnicity.split(',') : undefined,
-      bodyType: route.searchParams.bodyType ? route.searchParams.bodyType.split(',') : undefined,
-      hairColor: route.searchParams.hairColor ? route.searchParams.hairColor.split(',') : undefined,
-      services: route.searchParams.services ? route.searchParams.services.split(',') : undefined,
-      intendedAudience: route.searchParams.intendedAudience ? route.searchParams.intendedAudience.split(',') : undefined,
-      placeOfService: route.searchParams.placeOfService ? route.searchParams.placeOfService.split(',') : undefined,
+      is_verified: route.searchParams.is_verified === 'true' ? true : undefined,
+      is_featured: route.searchParams.is_featured === 'true' ? true : undefined,
     };
+
+    // Include any custom query parameters
+    Object.entries(route.searchParams).forEach(([key, val]) => {
+      if (!['category', 'city', 'area', 'q', 'sort', 'page', 'is_verified', 'is_featured'].includes(key) && val) {
+        filters[key] = val.includes(',') ? val.split(',') : val;
+      }
+    });
+
     setActiveFilters(filters);
     setCurrentPage(1);
   }, [categorySlug, citySlug, JSON.stringify(route.searchParams)]);
@@ -69,18 +72,18 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
     const fetchMeta = async () => {
       if (categorySlug) {
         const cat = await CategoriesService.getBySlug(categorySlug);
-        setCategoryName(cat ? cat.name : categorySlug);
-        setCategoryDesc(cat ? cat.description : 'Explore premium adult classified listings near you.');
+        setCategoryName(cat ? cat.name : categorySlug.replace(/-/g, ' '));
+        setCategoryDesc(cat?.description || '');
       } else {
         setCategoryName('All Categories');
-        setCategoryDesc('Explore premium independent classified companion and massage directories.');
+        setCategoryDesc('Explore all verified companion classified listings.');
       }
 
       if (citySlug) {
         const cityObj = await LocationsService.getCityBySlug(citySlug);
         setCityName(cityObj ? cityObj.name : citySlug);
       } else {
-        setCityName('India');
+        setCityName('');
       }
     };
     fetchMeta();
@@ -117,21 +120,65 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
     // Create query parameter updates for URL sync
     const queryParamsUpdate: Record<string, string | string[] | null> = {
       area: newFilters.area || null,
-      nationality: newFilters.nationality && newFilters.nationality.length > 0 ? newFilters.nationality.join(',') : null,
-      ethnicity: newFilters.ethnicity && newFilters.ethnicity.length > 0 ? newFilters.ethnicity.join(',') : null,
-      bodyType: newFilters.bodyType && newFilters.bodyType.length > 0 ? newFilters.bodyType.join(',') : null,
-      hairColor: newFilters.hairColor && newFilters.hairColor.length > 0 ? newFilters.hairColor.join(',') : null,
-      services: newFilters.services && newFilters.services.length > 0 ? newFilters.services.join(',') : null,
-      intendedAudience: newFilters.intendedAudience && newFilters.intendedAudience.length > 0 ? newFilters.intendedAudience.join(',') : null,
-      placeOfService: newFilters.placeOfService && newFilters.placeOfService.length > 0 ? newFilters.placeOfService.join(',') : null,
+      is_verified: newFilters.is_verified ? 'true' : null,
+      is_featured: newFilters.is_featured ? 'true' : null,
     };
+
+    // Serialize any dynamic filter fields
+    Object.entries(newFilters).forEach(([key, val]) => {
+      if (!['category', 'city', 'area', 'is_verified', 'is_featured'].includes(key)) {
+        if (Array.isArray(val)) {
+          queryParamsUpdate[key] = val.length > 0 ? val.join(',') : null;
+        } else if (val) {
+          queryParamsUpdate[key] = String(val);
+        } else {
+          queryParamsUpdate[key] = null;
+        }
+      }
+    });
 
     setQueryParams(queryParamsUpdate);
 
     // If Category is changed in filter, navigate to the new category landing
     if (newFilters.category && newFilters.category !== categorySlug) {
-      const activeCity = citySlug || 'delhi';
-      navigateTo(`/${newFilters.category}/${activeCity}`);
+      const targetCity = newFilters.city || citySlug;
+      if (targetCity) {
+        navigateTo(`/${newFilters.category}/${targetCity}`);
+      } else {
+        navigateTo(`/${newFilters.category}`);
+      }
+      return;
+    }
+
+    // If City is changed in filter
+    if (newFilters.city && newFilters.city !== citySlug) {
+      const targetCat = newFilters.category || categorySlug;
+      if (targetCat) {
+        navigateTo(`/${targetCat}/${newFilters.city}`);
+      } else {
+        navigateTo('/category-city', { city: newFilters.city });
+      }
+      return;
+    }
+
+    // If Category was cleared
+    if (!newFilters.category && categorySlug) {
+      if (citySlug) {
+        navigateTo('/category-city', { city: citySlug });
+      } else {
+        navigateTo('/category-city');
+      }
+      return;
+    }
+
+    // If City was cleared
+    if (!newFilters.city && citySlug) {
+      if (categorySlug) {
+        navigateTo(`/${categorySlug}`);
+      } else {
+        navigateTo('/category-city');
+      }
+      return;
     }
   };
 
@@ -182,11 +229,16 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
             <span>Home</span>
           </button>
           <ChevronRight className="w-3 h-3 text-slate-300" />
-          <span className="text-slate-500 capitalize">{categoryName}</span>
+          <button 
+            onClick={() => categorySlug ? navigateTo(`/${categorySlug}`) : navigateTo('/category-city')}
+            className="hover:text-slate-600 capitalize text-slate-500"
+          >
+            {categoryName}
+          </button>
           {citySlug && (
             <>
               <ChevronRight className="w-3 h-3 text-slate-300" />
-              <span className="text-slate-900 font-semibold capitalize">{cityName}</span>
+              <span className="text-slate-900 font-semibold capitalize">{cityName || citySlug}</span>
             </>
           )}
         </nav>
@@ -197,13 +249,13 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-[10px] font-bold font-mono text-amber-300 uppercase tracking-wider mb-3">
               <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
-              VERIFIED COMPANIONS IN {cityName.toUpperCase()}
+              {cityName ? `VERIFIED ${categoryName.toUpperCase()} IN ${cityName.toUpperCase()}` : `VERIFIED ${categoryName.toUpperCase()}`}
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-              Premium {categoryName} in {cityName}
+              {categoryName} {cityName ? `in ${cityName}` : ''}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              {categoryDesc} Vetted profiles, active safety audits, and complete customer privacy protocols.
+              {categoryDesc || (cityName ? `Explore verified profiles and companion services in ${cityName}.` : 'Explore verified companion profiles.')}
             </p>
           </div>
         </div>
@@ -325,9 +377,8 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
                 <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto">
                   <AlertCircle className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-lg text-slate-900">No Advertisements Found</h3>
                 <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
-                  We couldn't find any premium profiles matching your combined search selections in {cityName}. Try broadening your attribute criteria or resetting filters.
+                  We couldn't find any active listings matching your search selections{cityName ? ` in ${cityName}` : ''}. Try broadening your criteria or resetting filters.
                 </p>
                 <div className="pt-2">
                   <button

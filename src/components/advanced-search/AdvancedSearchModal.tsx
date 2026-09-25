@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
-import { SearchService } from '../../services/search.service';
-import { mockFilterConfig } from '../../data/mock-filters';
+import { FiltersService } from '../../services/filters.service';
+import { DynamicFilter } from '../../types/api';
 import { KeywordSearch } from './KeywordSearch';
 import { CategorySelect } from './CategorySelect';
 import { LocationFilters } from './LocationFilters';
@@ -11,20 +11,13 @@ import { SelectedFilterChips } from './SelectedFilterChips';
 import { AdvancedSearchActions } from './AdvancedSearchActions';
 import { 
   X, 
-  Search, 
-  Globe, 
-  UserCircle, 
-  Activity, 
-  Palette, 
-  Briefcase, 
-  Users, 
-  MapPin,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Layers
 } from 'lucide-react';
 
 export const AdvancedSearchModal: React.FC = () => {
   const { isOpen, closeSearch, draftState, setDraftState } = useAdvancedSearch();
-  const [activeFilterFields, setActiveFilterFields] = useState<string[]>([]);
+  const [dynamicFilters, setDynamicFilters] = useState<DynamicFilter[]>([]);
 
   // 1. Prevent background page scrolling while modal is open
   useEffect(() => {
@@ -52,8 +45,16 @@ export const AdvancedSearchModal: React.FC = () => {
   // 3. Dynamic filter fields loading based on category selection
   useEffect(() => {
     const loadFields = async () => {
-      const fields = await SearchService.getFilters(draftState.category);
-      setActiveFilterFields(fields);
+      if (draftState.category) {
+        try {
+          const filters = await FiltersService.getByCategory(draftState.category);
+          setDynamicFilters(filters);
+        } catch {
+          setDynamicFilters([]);
+        }
+      } else {
+        setDynamicFilters([]);
+      }
     };
     loadFields();
   }, [draftState.category]);
@@ -68,7 +69,7 @@ export const AdvancedSearchModal: React.FC = () => {
       .join(', ');
   };
 
-  const handleFilterArrayChange = (field: keyof typeof draftState, values: string[]) => {
+  const handleFilterArrayChange = (field: string, values: string[]) => {
     setDraftState((prev) => ({
       ...prev,
       [field]: values.length > 0 ? values : undefined,
@@ -98,7 +99,7 @@ export const AdvancedSearchModal: React.FC = () => {
                 Advanced Search
               </h2>
               <p className="text-[11px] text-slate-500 font-medium">
-                Find premium independent listings that match your specific lifestyle preferences
+                Find verified classified listings that match your specific preferences
               </p>
             </div>
           </div>
@@ -124,153 +125,43 @@ export const AdvancedSearchModal: React.FC = () => {
           {/* Hierarchical Location Dropdowns */}
           <LocationFilters />
 
-          {/* Collapsible Advanced Attribute Panels */}
-          {activeFilterFields.length > 0 && (
+          {/* Dynamic Category Attributes Panels from API */}
+          {dynamicFilters.length > 0 && (
             <div className="space-y-3.5 pt-2">
               <div className="flex items-center gap-1.5 pb-2 border-b border-slate-100">
                 <SlidersHorizontal className="w-4 h-4 text-indigo-500" />
-                <h3 className="text-sm font-bold text-slate-800">Advanced Physical Attributes & Services</h3>
+                <h3 className="text-sm font-bold text-slate-800">Category Attributes & Services</h3>
               </div>
               
               <div className="grid grid-cols-1 gap-3">
-                
-                {/* NATIONALITY */}
-                {activeFilterFields.includes('nationality') && (
-                  <FilterAccordion
-                    id="nationality"
-                    title="Nationality"
-                    icon={<Globe className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.nationality, mockFilterConfig.nationalities)}
-                    count={draftState.nationality?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="nationality"
-                      options={mockFilterConfig.nationalities}
-                      selectedValues={draftState.nationality || []}
-                      onChange={(vals) => handleFilterArrayChange('nationality', vals)}
-                      isSearchable={true}
-                      searchPlaceholder="Search nationalities..."
-                      layout="grid"
-                    />
-                  </FilterAccordion>
-                )}
+                {dynamicFilters.map((filter) => {
+                  const options = (filter.options || []).map((opt) => ({
+                    label: opt.label,
+                    value: opt.slug || opt.value,
+                  }));
+                  const selectedValues = (draftState[filter.key] as string[]) || [];
 
-                {/* ETHNICITY */}
-                {activeFilterFields.includes('ethnicity') && (
-                  <FilterAccordion
-                    id="ethnicity"
-                    title="Ethnicity"
-                    icon={<UserCircle className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.ethnicity, mockFilterConfig.ethnicities)}
-                    count={draftState.ethnicity?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="ethnicity"
-                      options={mockFilterConfig.ethnicities}
-                      selectedValues={draftState.ethnicity || []}
-                      onChange={(vals) => handleFilterArrayChange('ethnicity', vals)}
-                      layout="chips"
-                    />
-                  </FilterAccordion>
-                )}
-
-                {/* BODY BUILD */}
-                {activeFilterFields.includes('bodyType') && (
-                  <FilterAccordion
-                    id="bodyType"
-                    title="Body Build / Type"
-                    icon={<Activity className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.bodyType, mockFilterConfig.bodyTypes)}
-                    count={draftState.bodyType?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="bodyType"
-                      options={mockFilterConfig.bodyTypes}
-                      selectedValues={draftState.bodyType || []}
-                      onChange={(vals) => handleFilterArrayChange('bodyType', vals)}
-                      layout="chips"
-                    />
-                  </FilterAccordion>
-                )}
-
-                {/* HAIR COLOR */}
-                {activeFilterFields.includes('hairColor') && (
-                  <FilterAccordion
-                    id="hairColor"
-                    title="Hair Color"
-                    icon={<Palette className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.hairColor, mockFilterConfig.hairColors)}
-                    count={draftState.hairColor?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="hairColor"
-                      options={mockFilterConfig.hairColors}
-                      selectedValues={draftState.hairColor || []}
-                      onChange={(vals) => handleFilterArrayChange('hairColor', vals)}
-                      layout="chips"
-                    />
-                  </FilterAccordion>
-                )}
-
-                {/* SERVICES OFFERED */}
-                {activeFilterFields.includes('services') && (
-                  <FilterAccordion
-                    id="services"
-                    title="Services Offered"
-                    icon={<Briefcase className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.services, mockFilterConfig.services)}
-                    count={draftState.services?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="services"
-                      options={mockFilterConfig.services}
-                      selectedValues={draftState.services || []}
-                      onChange={(vals) => handleFilterArrayChange('services', vals)}
-                      isSearchable={true}
-                      searchPlaceholder="Search private service options..."
-                      layout="grid"
-                    />
-                  </FilterAccordion>
-                )}
-
-                {/* INTENDED AUDIENCE */}
-                {activeFilterFields.includes('intendedAudience') && (
-                  <FilterAccordion
-                    id="intendedAudience"
-                    title="Intended Audience"
-                    icon={<Users className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.intendedAudience, mockFilterConfig.intendedAudiences)}
-                    count={draftState.intendedAudience?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="intendedAudience"
-                      options={mockFilterConfig.intendedAudiences}
-                      selectedValues={draftState.intendedAudience || []}
-                      onChange={(vals) => handleFilterArrayChange('intendedAudience', vals)}
-                      layout="chips"
-                    />
-                  </FilterAccordion>
-                )}
-
-                {/* PLACE OF SERVICE */}
-                {activeFilterFields.includes('placeOfService') && (
-                  <FilterAccordion
-                    id="placeOfService"
-                    title="Place of Service"
-                    icon={<MapPin className="w-4.5 h-4.5" />}
-                    summary={getSummary(draftState.placeOfService, mockFilterConfig.placesOfService)}
-                    count={draftState.placeOfService?.length || 0}
-                  >
-                    <SearchableMultiSelect
-                      id="placeOfService"
-                      options={mockFilterConfig.placesOfService}
-                      selectedValues={draftState.placeOfService || []}
-                      onChange={(vals) => handleFilterArrayChange('placeOfService', vals)}
-                      layout="chips"
-                    />
-                  </FilterAccordion>
-                )}
-
+                  return (
+                    <FilterAccordion
+                      key={filter.id}
+                      id={filter.key}
+                      title={filter.label}
+                      icon={<Layers className="w-4.5 h-4.5" />}
+                      summary={getSummary(selectedValues, options)}
+                      count={selectedValues.length}
+                    >
+                      <SearchableMultiSelect
+                        id={filter.key}
+                        options={options}
+                        selectedValues={selectedValues}
+                        onChange={(vals) => handleFilterArrayChange(filter.key, vals)}
+                        isSearchable={options.length > 6}
+                        searchPlaceholder={`Search ${filter.label.toLowerCase()}...`}
+                        layout={options.length > 8 ? 'grid' : 'chips'}
+                      />
+                    </FilterAccordion>
+                  );
+                })}
               </div>
             </div>
           )}

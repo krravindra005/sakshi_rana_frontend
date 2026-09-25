@@ -1,25 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
-import { SearchService } from '../../services/search.service';
 import { CategoriesService } from '../../services/categories.service';
 import { LocationsService } from '../../services/locations.service';
-import { mockFilterConfig } from '../../data/mock-filters';
+import { FiltersService } from '../../services/filters.service';
+import { Category, City, Area, DynamicFilter } from '../../types/api';
 import { FilterOptions } from '../../types/filter';
 import { 
-  X, 
   MapPin, 
   SlidersHorizontal, 
   Sparkles, 
-  Briefcase, 
-  UserCheck, 
-  HelpCircle,
   RefreshCw,
-  Globe,
-  UserCircle,
-  Activity,
-  Palette,
-  Users
+  ShieldCheck,
+  Award,
+  Globe
 } from 'lucide-react';
 
 interface SidebarFilterProps {
@@ -35,63 +29,82 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
 }) => {
   const { route } = useRouter();
   const { openSearch } = useAdvancedSearch();
-  const [activeFilterFields, setActiveFilterFields] = useState<string[]>([]);
 
-  // 1. Load active filter fields dynamically based on current category select
+  // State populated completely from API
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
+  const [availableAreas, setAvailableAreas] = useState<Area[]>([]);
+  const [currentCityName, setCurrentCityName] = useState<string>('');
+  const [dynamicFilters, setDynamicFilters] = useState<DynamicFilter[]>([]);
+
+  // 1. Fetch Categories and Cities from API
   useEffect(() => {
-    const loadFields = async () => {
-      const fields = await SearchService.getFilters(activeFilters.category);
-      setActiveFilterFields(fields);
-    };
-    loadFields();
-  }, [activeFilters.category]);
+    CategoriesService.getAll().then(setCategories).catch(() => {});
+    LocationsService.getCities().then(setCities).catch(() => {});
+  }, []);
 
-  // Handle multi-select checkboxes
-  const handleCheckboxChange = (
-    field: keyof Omit<FilterOptions, 'category' | 'country' | 'state' | 'city' | 'area'>,
-    value: string
-  ) => {
-    const currentValues = (activeFilters[field] as string[]) || [];
-    let updatedValues: string[];
-
-    if (currentValues.includes(value)) {
-      updatedValues = currentValues.filter((v) => v !== value);
+  // 2. Fetch Areas dynamically when city changes
+  useEffect(() => {
+    const targetCitySlug = activeFilters.city || route.city;
+    if (targetCitySlug) {
+      LocationsService.getCityBySlug(targetCitySlug).then((c) => {
+        if (c) {
+          setCurrentCityName(c.name);
+          LocationsService.getAreasByCity(c.id).then(setAvailableAreas).catch(() => {});
+        } else {
+          setCurrentCityName(targetCitySlug);
+          setAvailableAreas([]);
+        }
+      });
     } else {
-      updatedValues = [...currentValues, value];
+      setCurrentCityName('');
+      setAvailableAreas([]);
     }
+  }, [activeFilters.city, route.city]);
 
-    onFilterChange({
-      ...activeFilters,
-      [field]: updatedValues,
-    });
-  };
+  // 3. Load dynamic filters for current category from API
+  useEffect(() => {
+    const categorySlug = activeFilters.category || route.category;
+    if (categorySlug) {
+      FiltersService.getByCategory(categorySlug).then((filters) => {
+        setDynamicFilters(filters);
+      }).catch(() => {
+        setDynamicFilters([]);
+      });
+    } else {
+      setDynamicFilters([]);
+    }
+  }, [activeFilters.category, route.category]);
 
-  const handleSingleSelectChange = (field: keyof FilterOptions, value: string) => {
+  const handleSingleSelectChange = (field: string, value: string) => {
     onFilterChange({
       ...activeFilters,
       [field]: value || undefined,
     });
   };
 
-  // Fetch categories, cities, and areas dynamically from API
-  const [categories, setCategories] = useState<any[]>([]);
-  const [availableAreas, setAvailableAreas] = useState<any[]>([]);
-  const [currentCityName, setCurrentCityName] = useState<string>('');
+  const handleBooleanToggle = (field: 'is_verified' | 'is_featured') => {
+    onFilterChange({
+      ...activeFilters,
+      [field]: activeFilters[field] ? undefined : true,
+    });
+  };
 
-  useEffect(() => {
-    CategoriesService.getAll().then(setCategories).catch(() => {});
-  }, []);
+  const handleDynamicCheckboxChange = (filterKey: string, optionValue: string) => {
+    const currentValues = (activeFilters[filterKey] as string[]) || [];
+    let updatedValues: string[];
 
-  useEffect(() => {
-    if (route.city) {
-      LocationsService.getCityBySlug(route.city).then((c) => {
-        if (c) {
-          setCurrentCityName(c.name);
-          LocationsService.getAreasByCity(c.id).then(setAvailableAreas).catch(() => {});
-        }
-      });
+    if (currentValues.includes(optionValue)) {
+      updatedValues = currentValues.filter((v) => v !== optionValue);
+    } else {
+      updatedValues = [...currentValues, optionValue];
     }
-  }, [route.city]);
+
+    onFilterChange({
+      ...activeFilters,
+      [filterKey]: updatedValues.length > 0 ? updatedValues : undefined,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -99,7 +112,7 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
       {/* Filters Title Header */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
         <div className="flex items-center gap-1.5 text-slate-900">
-          <SlidersHorizontal className="w-4.5 h-4.5 text-slate-500" />
+          <SlidersHorizontal className="w-4 h-4 text-slate-500" />
           <h2 className="text-base font-bold tracking-tight">Search Filters</h2>
         </div>
         <button
@@ -114,7 +127,7 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
       {/* Advanced Search Promo Card */}
       <div className="p-3.5 bg-indigo-50/60 rounded-xl border border-indigo-100/80 flex flex-col gap-2.5 shadow-sm">
         <div className="flex items-start gap-2">
-          <Sparkles className="w-4.5 h-4.5 text-indigo-600 shrink-0 mt-0.5" />
+          <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
           <div className="space-y-0.5">
             <h4 className="text-xs font-bold text-indigo-950">Try Advanced Filters</h4>
             <p className="text-[10px] text-indigo-700 leading-tight">
@@ -139,14 +152,35 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
         </label>
         <select
           id="filter-category"
-          value={activeFilters.category || ''}
+          value={activeFilters.category || route.category || ''}
           onChange={(e) => handleSingleSelectChange('category', e.target.value)}
-          className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+          className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition cursor-pointer"
         >
           <option value="">All Categories</option>
           {categories.map((cat) => (
             <option key={cat.id} value={cat.slug}>
               {cat.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* FILTER: CITY */}
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono flex items-center gap-1">
+          <Globe className="w-3.5 h-3.5 text-slate-500" />
+          City
+        </label>
+        <select
+          id="filter-city"
+          value={activeFilters.city || route.city || ''}
+          onChange={(e) => handleSingleSelectChange('city', e.target.value)}
+          className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition cursor-pointer"
+        >
+          <option value="">All Cities</option>
+          {cities.map((city) => (
+            <option key={city.id} value={city.slug}>
+              {city.name}
             </option>
           ))}
         </select>
@@ -163,7 +197,7 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
             id="filter-area"
             value={activeFilters.area || ''}
             onChange={(e) => handleSingleSelectChange('area', e.target.value)}
-            className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none"
+            className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition cursor-pointer"
           >
             <option value="">All Areas</option>
             {availableAreas.map((area) => (
@@ -175,166 +209,95 @@ export const SidebarFilter: React.FC<SidebarFilterProps> = ({
         </div>
       )}
 
-      {/* FILTER: NATIONALITY (Multi-select Checkboxes) */}
-      {activeFilterFields.includes('nationality') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Nationality
+      {/* FILTER: QUALITY & TRUST BADGES */}
+      <div className="space-y-2.5 border-t border-slate-100 pt-4">
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+          Listing Trust & Status
+        </label>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-xs text-slate-700 hover:text-slate-900 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!activeFilters.is_verified}
+              onChange={() => handleBooleanToggle('is_verified')}
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+            />
+            <span className="flex items-center gap-1 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              Verified Profiles Only
+            </span>
           </label>
-          <div className="max-h-36 overflow-y-auto space-y-1.5 pr-2">
-            {mockFilterConfig.nationalities.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-nationality-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.nationality || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('nationality', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span>{item.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* FILTER: ETHNICITY */}
-      {activeFilterFields.includes('ethnicity') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Ethnicity
+          <label className="flex items-center gap-2 text-xs text-slate-700 hover:text-slate-900 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!activeFilters.is_featured}
+              onChange={() => handleBooleanToggle('is_featured')}
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+            />
+            <span className="flex items-center gap-1 font-medium">
+              <Award className="w-3.5 h-3.5 text-amber-500" />
+              Featured Listings Only
+            </span>
           </label>
-          <div className="space-y-1.5">
-            {mockFilterConfig.ethnicities.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-ethnicity-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.ethnicity || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('ethnicity', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span>{item.label}</span>
-              </label>
-            ))}
-          </div>
         </div>
-      )}
+      </div>
 
-      {/* FILTER: BODY TYPE */}
-      {activeFilterFields.includes('bodyType') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Body Build
-          </label>
-          <div className="space-y-1.5">
-            {mockFilterConfig.bodyTypes.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-body-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.bodyType || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('bodyType', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span>{item.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* DYNAMIC CATEGORY FILTERS (100% FROM API) */}
+      {dynamicFilters.map((filter) => {
+        if (!filter.options || filter.options.length === 0) return null;
 
-      {/* FILTER: SERVICES (Discreet Checkboxes) */}
-      {activeFilterFields.includes('services') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Services Offered
-          </label>
-          <div className="max-h-44 overflow-y-auto space-y-1.5 pr-2">
-            {mockFilterConfig.services.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-service-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.services || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('services', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span className="truncate">{item.label}</span>
+        if (filter.type === 'single_select') {
+          return (
+            <div key={filter.id} className="space-y-2 border-t border-slate-100 pt-4">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+                {filter.label}
               </label>
-            ))}
-          </div>
-        </div>
-      )}
+              <select
+                value={activeFilters[filter.key] || ''}
+                onChange={(e) => handleSingleSelectChange(filter.key, e.target.value)}
+                className="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-slate-700 focus:outline-none focus:bg-white focus:border-indigo-500 transition cursor-pointer"
+              >
+                <option value="">All {filter.label}</option>
+                {filter.options.map((opt) => (
+                  <option key={opt.id} value={opt.slug || opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        }
 
-      {/* FILTER: HAIR COLOR */}
-      {activeFilterFields.includes('hairColor') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Hair Color
-          </label>
-          <div className="space-y-1.5">
-            {mockFilterConfig.hairColors.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-hair-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.hairColor || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('hairColor', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span>{item.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+        return (
+          <div key={filter.id} className="space-y-2.5 border-t border-slate-100 pt-4">
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+              {filter.label}
+            </label>
+            <div className="max-h-40 overflow-y-auto space-y-1.5 pr-2 scrollbar-thin">
+              {filter.options.map((opt) => {
+                const optVal = opt.slug || opt.value;
+                const isChecked = ((activeFilters[filter.key] as string[]) || []).includes(optVal);
 
-      {/* FILTER: INTENDED AUDIENCE */}
-      {activeFilterFields.includes('intendedAudience') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Intended Audience
-          </label>
-          <div className="space-y-1.5">
-            {mockFilterConfig.intendedAudiences.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-audience-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.intendedAudience || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('intendedAudience', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span>{item.label}</span>
-              </label>
-            ))}
+                return (
+                  <label
+                    key={opt.id}
+                    className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => handleDynamicCheckboxChange(filter.key, optVal)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5 cursor-pointer"
+                    />
+                    <span className="truncate">{opt.label}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* FILTER: PLACE OF SERVICE */}
-      {activeFilterFields.includes('placeOfService') && (
-        <div className="space-y-2.5 border-t border-slate-50 pt-4">
-          <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-            Place of Service
-          </label>
-          <div className="space-y-1.5">
-            {mockFilterConfig.placesOfService.map((item) => (
-              <label key={item.value} className="flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer">
-                <input
-                  id={`filter-place-${item.value}`}
-                  type="checkbox"
-                  checked={(activeFilters.placeOfService || []).includes(item.value)}
-                  onChange={() => handleCheckboxChange('placeOfService', item.value)}
-                  className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5"
-                />
-                <span className="truncate">{item.label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
+        );
+      })}
 
     </div>
   );

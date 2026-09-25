@@ -19,6 +19,8 @@ export interface FilterOptions {
   state?: string;
   city?: string;
   area?: string;
+  is_verified?: boolean;
+  is_featured?: boolean;
   nationality?: string[];
   ethnicity?: string[];
   bodyType?: string[];
@@ -26,6 +28,7 @@ export interface FilterOptions {
   services?: string[];
   intendedAudience?: string[];
   placeOfService?: string[];
+  [key: string]: any;
 }
 
 export interface FilterMetaOption {

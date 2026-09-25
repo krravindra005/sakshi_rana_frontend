@@ -53,11 +53,14 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
       {/* Profile Photo Stage */}
       <div className="relative h-64 bg-slate-100 overflow-hidden">
         <img
-          src={ad.profileImage}
+          src={ad.profileImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600'}
           alt={ad.profileName}
           loading="lazy"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600';
+          }}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent" />
 
@@ -126,22 +129,30 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
         </div>
 
         {/* Attributes summary grids */}
-        <div className="pt-3.5 border-t border-slate-50">
-          <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-500 font-mono text-center">
-            <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
-              <span className="block text-slate-400 text-[9px] uppercase font-bold">Body Type</span>
-              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes?.bodyType || 'Slim'}</span>
-            </div>
-            <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
-              <span className="block text-slate-400 text-[9px] uppercase font-bold">Hair</span>
-              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes?.hairColor || 'Dark'}</span>
-            </div>
-            <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
-              <span className="block text-slate-400 text-[9px] uppercase font-bold">Origins</span>
-              <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes?.nationality || 'Indian'}</span>
+        {(ad.attributes?.bodyType || ad.attributes?.hairColor || ad.attributes?.nationality) && (
+          <div className="pt-3.5 border-t border-slate-50">
+            <div className="grid grid-cols-3 gap-2 text-[10px] text-slate-500 font-mono text-center">
+              {ad.attributes?.bodyType && (
+                <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
+                  <span className="block text-slate-400 text-[9px] uppercase font-bold">Body Type</span>
+                  <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes.bodyType}</span>
+                </div>
+              )}
+              {ad.attributes?.hairColor && (
+                <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
+                  <span className="block text-slate-400 text-[9px] uppercase font-bold">Hair</span>
+                  <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes.hairColor}</span>
+                </div>
+              )}
+              {ad.attributes?.nationality && (
+                <div className="bg-slate-50 rounded-lg py-1 border border-slate-100/50">
+                  <span className="block text-slate-400 text-[9px] uppercase font-bold">Origins</span>
+                  <span className="font-semibold text-slate-700 truncate block mt-0.5">{ad.attributes.nationality}</span>
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        )}
 
         {/* Bottom footer bar */}
         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
