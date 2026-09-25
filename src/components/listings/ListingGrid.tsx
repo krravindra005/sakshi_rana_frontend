@@ -59,7 +59,7 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
     // Include any custom query parameters
     Object.entries(route.searchParams).forEach(([key, val]) => {
       if (!['category', 'city', 'area', 'q', 'sort', 'page', 'is_verified', 'is_featured'].includes(key) && val) {
-        filters[key] = val.includes(',') ? val.split(',') : val;
+        filters[key] = typeof val === 'string' && val.includes(',') ? val.split(',') : val;
       }
     });
 

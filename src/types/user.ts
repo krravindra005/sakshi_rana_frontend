@@ -16,14 +16,15 @@ export interface UserProfile {
   permissions?: string[];
 }
 
-// User model containing profile and meta-information
 export interface User {
   id: string;
   email: string;
+  name?: string;
   profile: UserProfile;
-  role: 'advertiser' | 'admin' | 'moderator' | 'user';
-  status: 'active' | 'suspended';
+  role: 'advertiser' | 'admin' | 'moderator' | 'user' | string;
+  status: 'active' | 'suspended' | 'banned' | string;
   createdAt: string;
+  [key: string]: any;
 }
 
 export interface Wallet {

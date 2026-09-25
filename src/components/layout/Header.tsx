@@ -4,6 +4,7 @@ import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
 import { CategoriesService } from '../../services/categories.service';
 import { LocationsService } from '../../services/locations.service';
 import { UsersService } from '../../services/users.service';
+import { WalletService } from '../../services/wallet.service';
 import { Category } from '../../types/api';
 import { City } from '../../types/location';
 import { 
@@ -18,6 +19,7 @@ import {
   ShieldCheck, 
   LogOut, 
   FolderHeart,
+  Heart,
   Settings,
   HelpCircle,
   SlidersHorizontal,
@@ -71,10 +73,25 @@ export const Header: React.FC = () => {
     loadCategories();
     LocationsService.getCities().then(setCities).catch(() => {});
 
+    const updateWallet = async () => {
+      if (UsersService.isLoggedIn()) {
+        try {
+          const w = await WalletService.getWallet();
+          setWallet({ balance: w.balance ?? 0, currency: w.currency_code || 'Credits' });
+        } catch {
+          setWallet(UsersService.getWallet());
+        }
+      } else {
+        setWallet(UsersService.getWallet());
+      }
+    };
+
+    updateWallet();
+
     const handleAuthStateChange = () => {
       setIsLoggedIn(UsersService.isLoggedIn());
       setCurrentUser(UsersService.getProfile());
-      setWallet(UsersService.getWallet());
+      updateWallet();
     };
     window.addEventListener('auth_state_changed', handleAuthStateChange);
     return () => window.removeEventListener('auth_state_changed', handleAuthStateChange);
@@ -83,13 +100,14 @@ export const Header: React.FC = () => {
   // Close menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (megaMenuRef.current && !megaMenuRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (megaMenuRef.current && !megaMenuRef.current.contains(target)) {
         setIsMegaMenuOpen(false);
       }
-      if (locationRef.current && !locationRef.current.contains(event.target as Node)) {
+      if (locationRef.current && !locationRef.current.contains(target)) {
         setIsLocationDropdownOpen(false);
       }
-      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+      if (profileRef.current && !profileRef.current.contains(target)) {
         setIsProfileDropdownOpen(false);
       }
     };
@@ -356,15 +374,21 @@ export const Header: React.FC = () => {
 
             {/* Account Selector */}
             {isLoggedIn ? (
-              <div className="relative" ref={profileRef}>
+              <div className="relative z-50" ref={profileRef}>
                 <button
+                  type="button"
                   id="profile-dropdown-btn"
-                  onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                  className="flex items-center gap-1.5 p-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-full transition"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsProfileDropdownOpen((prev) => !prev);
+                  }}
+                  className="flex items-center gap-1.5 p-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-full transition cursor-pointer select-none"
+                  aria-expanded={isProfileDropdownOpen}
+                  aria-haspopup="true"
                 >
                   <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs overflow-hidden">
-                    {currentUser.avatar ? (
-                      <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    {currentUser?.avatar ? (
+                      <img src={currentUser.avatar} alt={currentUser.name || 'User'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <User className="w-4 h-4 text-slate-400" />
                     )}
@@ -377,38 +401,44 @@ export const Header: React.FC = () => {
                   <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-slate-100 shadow-xl py-2 z-50 overflow-hidden">
                     <div className="px-4 py-3 border-b border-slate-50 bg-slate-50/50">
                       <p className="text-xs text-slate-400">Signed in as</p>
-                      <p className="text-sm font-bold text-slate-900 truncate">{currentUser.name}</p>
+                      <p className="text-sm font-bold text-slate-900 truncate">{currentUser?.name || 'My Account'}</p>
                       <div className="mt-1.5 flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[10px] font-mono text-slate-500">Wallet: {wallet.balance.toLocaleString()} {wallet.currency}</span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          Wallet: {wallet?.balance != null ? Number(wallet.balance).toLocaleString() : '0'} {wallet?.currency || 'Credits'}
+                        </span>
                       </div>
                     </div>
                     
                     <div className="p-1">
                       <button
+                        type="button"
                         onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/dashboard', { tab: 'ads' }); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition text-left cursor-pointer"
                       >
                         <FolderHeart className="w-4 h-4 text-slate-400" />
                         My Advertisements
                       </button>
                       <button
+                        type="button"
                         onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/dashboard', { tab: 'favorites' }); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition text-left cursor-pointer"
                       >
-                        <FolderHeart className="w-4 h-4 text-slate-400" />
+                        <Heart className="w-4 h-4 text-rose-500 fill-rose-500/20" />
                         Favorite Collections
                       </button>
                       <button
+                        type="button"
                         onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/dashboard', { tab: 'wallet' }); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition text-left cursor-pointer"
                       >
                         <ShieldCheck className="w-4 h-4 text-slate-400" />
                         Wallet & Promotions
                       </button>
                       <button
+                        type="button"
                         onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/dashboard', { tab: 'profile' }); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition text-left cursor-pointer"
                       >
                         <Settings className="w-4 h-4 text-slate-400" />
                         Profile Settings
@@ -416,8 +446,9 @@ export const Header: React.FC = () => {
                     </div>
                     <div className="border-t border-slate-50 p-1">
                       <button
+                        type="button"
                         onClick={() => { setIsProfileDropdownOpen(false); UsersService.logout(); navigateTo('/'); }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50/50 rounded-lg transition"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50/50 rounded-lg transition text-left cursor-pointer"
                       >
                         <LogOut className="w-4 h-4" />
                         Sign Out

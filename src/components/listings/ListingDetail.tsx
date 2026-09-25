@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { AdsService } from '../../services/ads.service';
+import { UsersService } from '../../services/users.service';
+import { FavoritesService } from '../../services/favorites.service';
 import { Ad } from '../../types/ad';
 import { 
   ShieldCheck, 
@@ -40,32 +42,80 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
 
   // 1. Fetch listing details
   useEffect(() => {
+    let mounted = true;
     const fetchAd = async () => {
       setLoading(true);
       try {
         const result = await AdsService.getBySlug(slug);
-        if (result) {
+        if (result && mounted) {
           setAd(result);
           // Increment views count mock
           result.viewsCount += 1;
           
+          if (UsersService.isLoggedIn()) {
+            FavoritesService.isFavorite(result.id).then((status) => {
+              if (mounted) setIsFavorited(status);
+            }).catch(() => {});
+          }
+
           // Fetch similar ads (same category)
           const allAds = await AdsService.getAll();
-          const similar = allAds.filter(
-            (item) => item.categorySlug === result.categorySlug && item.id !== result.id
-          );
-          setSimilarAds(similar.slice(0, 3));
+          if (mounted) {
+            const similar = allAds.filter(
+              (item) => item.categorySlug === result.categorySlug && item.id !== result.id
+            );
+            setSimilarAds(similar.slice(0, 3));
+          }
         }
       } catch (err) {
         console.error('Error fetching ad detail', err);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
     fetchAd();
     setIsPhoneRevealed(false);
     setActiveImageIdx(0);
+
+    const handleFavUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ adId: string; isFavorite: boolean }>;
+      if (custom.detail && ad && (String(custom.detail.adId) === String(ad.id) || String(custom.detail.adId) === String(ad.slug))) {
+        if (mounted) setIsFavorited(custom.detail.isFavorite);
+      }
+    };
+    window.addEventListener('favorites_updated', handleFavUpdated);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('favorites_updated', handleFavUpdated);
+    };
   }, [slug]);
+
+  const handleToggleFavorite = async () => {
+    if (!ad) return;
+    if (!UsersService.isLoggedIn()) {
+      const currentUrl = window.location.pathname + window.location.search;
+      navigateTo(`/login?redirect=${encodeURIComponent(currentUrl)}`);
+      return;
+    }
+    const previous = isFavorited;
+    setIsFavorited(!previous);
+    setAd((prev) => prev ? {
+      ...prev,
+      favoriteCount: Math.max(0, (prev.favoriteCount || 0) + (previous ? -1 : 1))
+    } : null);
+
+    try {
+      const newStatus = await FavoritesService.toggle(ad.id);
+      setIsFavorited(newStatus);
+    } catch {
+      setIsFavorited(previous);
+      setAd((prev) => prev ? {
+        ...prev,
+        favoriteCount: Math.max(0, (prev.favoriteCount || 0) + (previous ? 1 : -1))
+      } : null);
+    }
+  };
 
   const handleReportSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,6 +202,23 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
                   referrerPolicy="no-referrer"
                 />
                 
+                {/* Favorite Heart Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleFavorite();
+                  }}
+                  className={`absolute top-4 right-4 z-20 p-2.5 rounded-full border backdrop-blur-md transition shadow cursor-pointer ${
+                    isFavorited
+                      ? 'bg-rose-500 text-white border-rose-500 hover:bg-rose-600'
+                      : 'bg-white/90 hover:bg-white text-slate-700 border-slate-200'
+                  }`}
+                  title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current text-white' : 'text-slate-700'}`} />
+                </button>
+
                 {/* Images count indicator */}
                 <div className="absolute bottom-4 right-4 bg-slate-900/60 backdrop-blur-md text-white font-mono text-[11px] font-bold py-1 px-2.5 rounded-lg">
                   {activeImageIdx + 1} / {ad.images.length} Photos
@@ -212,6 +279,19 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
                     </span>
                   )}
                   <span className="text-xs text-slate-400 font-medium">Category: <strong className="capitalize text-slate-700">{ad.categorySlug.replace('-', ' ')}</strong></span>
+                  
+                  <button
+                    type="button"
+                    onClick={handleToggleFavorite}
+                    className={`ml-auto inline-flex items-center gap-1.5 py-1 px-3 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                      isFavorited
+                        ? 'bg-rose-50 border-rose-200 text-rose-600 hover:bg-rose-100'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${isFavorited ? 'fill-rose-500 text-rose-500' : 'text-slate-400'}`} />
+                    <span>{isFavorited ? 'Saved in Favorites' : 'Add to Favorites'}</span>
+                  </button>
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">{ad.title}</h1>
@@ -220,6 +300,11 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
                   <span className="flex items-center gap-1"><MapPin className="w-4 h-4 text-slate-400" /> <span className="capitalize">{ad.citySlug}</span>, {ad.areaSlug?.replace('-', ' ')}</span>
                   <span className="flex items-center gap-1"><Calendar className="w-4 h-4 text-slate-400" /> Published {ad.postedAt}</span>
                   <span className="flex items-center gap-1"><Eye className="w-4 h-4 text-slate-400" /> {ad.viewsCount} View audits</span>
+                  {ad.favoriteCount !== undefined && ad.favoriteCount > 0 && (
+                    <span className="flex items-center gap-1 text-rose-600 font-semibold">
+                      <Heart className="w-3.5 h-3.5 fill-rose-500" /> {ad.favoriteCount} Favorites
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -334,6 +419,20 @@ export const ListingDetail: React.FC<ListingDetailProps> = ({ slug }) => {
                   <MessageSquare className="w-4 h-4 text-emerald-400" />
                   <span>Send WhatsApp Message</span>
                 </a>
+
+                {/* Favorite Action Button */}
+                <button
+                  type="button"
+                  onClick={handleToggleFavorite}
+                  className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm border transition shadow-sm cursor-pointer ${
+                    isFavorited
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-600'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                  }`}
+                >
+                  <Heart className={`w-4 h-4 ${isFavorited ? 'fill-current text-white' : 'text-rose-400'}`} />
+                  <span>{isFavorited ? 'Saved in Favorite Collections' : 'Save to Favorites'}</span>
+                </button>
               </div>
 
               {/* Safety notice disclaimer */}

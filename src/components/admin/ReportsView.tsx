@@ -34,13 +34,21 @@ export const ReportsView: React.FC = () => {
   const [actionModal, setActionModal] = useState<{ id: string; action: 'resolve' | 'dismiss' } | null>(null);
   const [actionNotes, setActionNotes] = useState('Compliance standards evaluated. No violation found.');
 
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setFeedback({ type, message });
+    setTimeout(() => setFeedback(null), 4000);
+  };
+
   const fetchReports = async () => {
     try {
       setLoading(true);
-      const all = await adminReportService.getReports();
+      const all = await adminReportService.getReports(statusFilter || undefined);
       setReports(all);
       if (all.length > 0) {
-        setSelectedReport(all[0]);
+        setSelectedReport(prev => (prev ? all.find(r => r.id === prev.id) || all[0] : all[0]));
       } else {
         setSelectedReport(null);
       }
@@ -53,20 +61,24 @@ export const ReportsView: React.FC = () => {
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     if (selectedReport) {
-      if (selectedReport.entityType === 'AD') {
-        adminAdService.getAdById(selectedReport.reportedEntityId).then(ad => {
-          setLinkedAd(ad);
-          setLinkedUser(null);
-        });
-      } else {
-        adminUserService.getUserById(selectedReport.reportedEntityId).then(usr => {
-          setLinkedUser(usr);
-          setLinkedAd(null);
-        });
+      if (selectedReport.ad) {
+        setLinkedAd(selectedReport.ad);
+        setLinkedUser(null);
+      } else if (selectedReport.reportedUser) {
+        setLinkedUser(selectedReport.reportedUser);
+        setLinkedAd(null);
+      } else if (selectedReport.entityType === 'AD' && selectedReport.reportedEntityId) {
+        adminAdService.getAdById(selectedReport.reportedEntityId)
+          .then(ad => { setLinkedAd(ad); setLinkedUser(null); })
+          .catch(() => setLinkedAd(null));
+      } else if (selectedReport.reportedEntityId) {
+        adminUserService.getUserById(selectedReport.reportedEntityId)
+          .then(usr => { setLinkedUser(usr); setLinkedAd(null); })
+          .catch(() => setLinkedUser(null));
       }
     } else {
       setLinkedAd(null);
@@ -76,30 +88,37 @@ export const ReportsView: React.FC = () => {
 
   const handleAssignToMe = async (id: string) => {
     try {
-      await adminReportService.assignReport(id, 'Marcus Brody');
+      setIsProcessing(true);
+      await adminReportService.claimReport(id);
+      showNotification(`Ticket #${id} claimed successfully.`);
       await fetchReports();
-    } catch (err) {
-      alert('Error assigning report');
+    } catch (err: any) {
+      showNotification(err?.message || 'Error claiming report', 'error');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleResolveDismiss = async () => {
-    if (!actionModal) return;
+    if (!actionModal || isProcessing) return;
     try {
+      setIsProcessing(true);
       await adminReportService.updateReportStatus(actionModal.id, actionModal.action === 'resolve' ? 'resolved' : 'dismissed', actionNotes);
+      showNotification(`Report #${actionModal.id} has been marked as ${actionModal.action === 'resolve' ? 'resolved' : 'dismissed'}.`);
       setActionModal(null);
       setActionNotes('');
       await fetchReports();
-    } catch (err) {
-      alert('Error updating status');
+    } catch (err: any) {
+      showNotification(err?.message || 'Error updating report status', 'error');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   // Filters logic
   const filteredReports = reports.filter(r => {
-    const matchesStatus = !statusFilter || r.status === statusFilter;
     const matchesPriority = !priorityFilter || r.priority === priorityFilter;
-    return matchesStatus && matchesPriority;
+    return matchesPriority;
   });
 
   return (
@@ -113,11 +132,26 @@ export const ReportsView: React.FC = () => {
         </div>
         <button 
           onClick={fetchReports}
-          className="p-2 border border-[#E4E7EC] bg-white rounded-xl text-[#667085] hover:text-[#18181B] self-end"
+          disabled={loading || isProcessing}
+          className="p-2 border border-[#E4E7EC] bg-white rounded-xl text-[#667085] hover:text-[#18181B] self-end flex items-center gap-1.5 font-mono text-xs disabled:opacity-50"
+          title="Refresh reports"
         >
-          <RefreshCw size={15} />
+          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          <span>Sync Reports</span>
         </button>
       </div>
+
+      {/* FEEDBACK NOTIFICATION BANNER */}
+      {feedback && (
+        <div className={`p-4 rounded-xl text-xs font-mono border flex items-center gap-2.5 transition-all ${
+          feedback.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-rose-50 border-rose-200 text-rose-800'
+        }`}>
+          {feedback.type === 'success' ? <Check size={16} className="text-green-600 flex-shrink-0" /> : <AlertTriangle size={16} className="text-rose-600 flex-shrink-0" />}
+          <span className="font-semibold">{feedback.message}</span>
+        </div>
+      )}
 
       {/* FILTER CHEVRON */}
       <div className="bg-white border border-[#E4E7EC] rounded-2xl p-4 shadow-xs flex flex-wrap gap-4 items-center">
@@ -224,7 +258,9 @@ export const ReportsView: React.FC = () => {
                   <div className="p-4 border border-slate-200 bg-slate-50 rounded-xl text-xs leading-relaxed text-[#18181B] italic">
                     "{selectedReport.description}"
                   </div>
-                  <div className="text-[10px] font-mono text-[#667085] text-right">Submitted by anonymous reporter: {selectedReport.reporter}</div>
+                  <div className="text-[10px] font-mono text-[#667085] text-right">
+                    Submitted by: <strong className="text-slate-800">{selectedReport.reporterName || 'Anonymous User'}</strong>
+                  </div>
                 </div>
 
                 {/* Linked Content Preview */}
@@ -234,14 +270,16 @@ export const ReportsView: React.FC = () => {
                   {linkedAd && (
                     <div className="p-4 border border-[#E4E7EC] rounded-xl flex gap-3.5 bg-[#F8F9FC] items-center">
                       <img 
-                        src={linkedAd.profileImage || linkedAd.images[0]} 
-                        alt={linkedAd.profileName} 
+                        src={linkedAd.profileImage || (linkedAd.images && linkedAd.images[0]) || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600'} 
+                        alt={linkedAd.profileName || linkedAd.title} 
                         className="w-12 h-12 object-cover rounded-lg border flex-shrink-0"
                         referrerPolicy="no-referrer"
                       />
-                      <div className="text-xs min-w-0">
+                      <div className="text-xs min-w-0 flex-1">
                         <h6 className="font-bold text-[#18181B] truncate">{linkedAd.title}</h6>
-                        <span className="text-[10px] font-mono text-[#667085] block mt-0.5">Category: {linkedAd.categorySlug} • City: {linkedAd.citySlug}</span>
+                        <span className="text-[10px] font-mono text-[#667085] block mt-0.5">
+                          Category: {linkedAd.categorySlug || 'Escorts'} • City: {linkedAd.citySlug || 'India'}
+                        </span>
                         <span className="inline-block px-1.5 py-0.5 bg-green-50 text-green-700 font-bold text-[9px] uppercase rounded-md mt-1.5">
                           Status: {linkedAd.status}
                         </span>
@@ -252,14 +290,15 @@ export const ReportsView: React.FC = () => {
                   {linkedUser && (
                     <div className="p-4 border border-[#E4E7EC] rounded-xl flex gap-3 bg-[#F8F9FC] items-center">
                       <img 
-                        src={linkedUser.profile.avatar} 
-                        alt={linkedUser.profile.name} 
-                        className="w-10 h-10 rounded-full object-cover"
+                        src={linkedUser.profile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(linkedUser.name || 'User')}&background=random`} 
+                        alt={linkedUser.profile?.name || linkedUser.name || 'User'} 
+                        className="w-10 h-10 rounded-full object-cover border"
                         referrerPolicy="no-referrer"
                       />
                       <div className="text-xs min-w-0 font-mono">
-                        <h6 className="font-bold text-[#18181B] font-sans">{linkedUser.profile.name}</h6>
-                        <span>Joined: {linkedUser.profile.joinedAt} • Status: {linkedUser.status}</span>
+                        <h6 className="font-bold text-[#18181B] font-sans">{linkedUser.profile?.name || linkedUser.name}</h6>
+                        <span className="text-[10px] text-slate-500 block truncate">{linkedUser.email}</span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">Joined: {linkedUser.profile?.joinedAt || 'Recently'} • Status: <strong className="text-green-700 capitalize">{linkedUser.status}</strong></span>
                       </div>
                     </div>
                   )}

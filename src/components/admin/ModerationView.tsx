@@ -22,7 +22,9 @@ export const ModerationView: React.FC = () => {
   const [queue, setQueue] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
-  const [advertiser, setAdvertiser] = useState<User | null>(null);
+  const [advertiser, setAdvertiser] = useState<any>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Rejection overlay
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -55,46 +57,69 @@ export const ModerationView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedAd) {
-      adminUserService.getUserById(selectedAd.userId || '').then(u => setAdvertiser(u));
+    if (selectedAd && selectedAd.userId) {
+      adminUserService.getUserById(selectedAd.userId).then(u => setAdvertiser(u)).catch(() => setAdvertiser(null));
     } else {
       setAdvertiser(null);
     }
   }, [selectedAd]);
 
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setFeedback({ type, message });
+    setTimeout(() => setFeedback(null), 4000);
+  };
+
   const handleApprove = async () => {
-    if (!selectedAd) return;
+    if (!selectedAd || isProcessing) return;
     try {
-      await adminAdService.updateAdStatus(selectedAd.id, 'published', 'approved', 'Fully approved in routine compliance audit.');
-      await fetchQueue();
-    } catch (err) {
-      alert('Error approving');
+      setIsProcessing(true);
+      await adminAdService.approveAd(selectedAd.id, 'Fully approved in routine compliance audit.');
+      showNotification(`Listing "${selectedAd.title}" successfully approved and published!`, 'success');
+      const updatedQueue = queue.filter(a => a.id !== selectedAd.id);
+      setQueue(updatedQueue);
+      setSelectedAd(updatedQueue.length > 0 ? updatedQueue[0] : null);
+    } catch (err: any) {
+      showNotification(err?.message || 'Error approving advertisement', 'error');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleReject = async () => {
-    if (!selectedAd) return;
+    if (!selectedAd || isProcessing) return;
     try {
+      setIsProcessing(true);
       const fullNote = rejectDetails ? `${rejectReason}: ${rejectDetails}` : rejectReason;
-      await adminAdService.updateAdStatus(selectedAd.id, 'rejected', 'rejected', fullNote);
+      await adminAdService.rejectAd(selectedAd.id, fullNote);
+      showNotification(`Listing #${selectedAd.id} rejected. Reason logged in audit records.`, 'success');
       setShowRejectModal(false);
       setRejectDetails('');
-      await fetchQueue();
-    } catch (err) {
-      alert('Error rejecting');
+      const updatedQueue = queue.filter(a => a.id !== selectedAd.id);
+      setQueue(updatedQueue);
+      setSelectedAd(updatedQueue.length > 0 ? updatedQueue[0] : null);
+    } catch (err: any) {
+      showNotification(err?.message || 'Error rejecting advertisement', 'error');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const handleRequestChanges = async () => {
-    if (!selectedAd) return;
+    if (!selectedAd || isProcessing) return;
     try {
+      setIsProcessing(true);
       const issuesNote = changeChecklists.length > 0 ? `Issues to resolve: ${changeChecklists.join(', ')}` : 'Content requires revision';
-      await adminAdService.updateAdStatus(selectedAd.id, 'draft', 'changes_requested', issuesNote);
+      await adminAdService.requestChanges(selectedAd.id, issuesNote);
+      showNotification(`Revision request dispatched for Listing #${selectedAd.id}.`, 'success');
       setShowChangesModal(false);
       setChangeChecklists([]);
-      await fetchQueue();
-    } catch (err) {
-      alert('Error requesting changes');
+      const updatedQueue = queue.filter(a => a.id !== selectedAd.id);
+      setQueue(updatedQueue);
+      setSelectedAd(updatedQueue.length > 0 ? updatedQueue[0] : null);
+    } catch (err: any) {
+      showNotification(err?.message || 'Error requesting changes', 'error');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -118,12 +143,26 @@ export const ModerationView: React.FC = () => {
         </div>
         <button 
           onClick={fetchQueue}
-          className="p-2 border border-[#E4E7EC] bg-white rounded-xl text-[#667085] hover:text-[#18181B] self-end"
+          disabled={loading || isProcessing}
+          className="p-2 border border-[#E4E7EC] bg-white rounded-xl text-[#667085] hover:text-[#18181B] self-end flex items-center gap-1.5 font-mono text-xs disabled:opacity-50"
           title="Sync queue"
         >
-          <RefreshCw size={15} />
+          <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          <span>Refresh Queue</span>
         </button>
       </div>
+
+      {/* FEEDBACK NOTIFICATION BANNER */}
+      {feedback && (
+        <div className={`p-4 rounded-xl text-xs font-mono border flex items-center gap-2.5 transition-all ${
+          feedback.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-rose-50 border-rose-200 text-rose-800'
+        }`}>
+          {feedback.type === 'success' ? <Check size={16} className="text-green-600 flex-shrink-0" /> : <AlertCircle size={16} className="text-rose-600 flex-shrink-0" />}
+          <span className="font-semibold">{feedback.message}</span>
+        </div>
+      )}
 
       {queue.length === 0 ? (
         <div className="bg-white border border-[#E4E7EC] p-12 text-center rounded-2xl flex flex-col items-center max-w-xl mx-auto space-y-4">
@@ -134,6 +173,13 @@ export const ModerationView: React.FC = () => {
           <p className="text-xs text-slate-400 font-mono leading-relaxed">
             All user created listings and photo verification files have been vetted against standard marketplace terms. Enjoy the tranquility!
           </p>
+          <button 
+            onClick={fetchQueue}
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-mono font-bold hover:bg-slate-800 transition-all flex items-center gap-2"
+          >
+            <RefreshCw size={13} />
+            <span>Check For New Submissions</span>
+          </button>
         </div>
       ) : (
         /* TRIPLE COLUMN WORKSPACE GRID */
@@ -145,6 +191,7 @@ export const ModerationView: React.FC = () => {
             <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin">
               {queue.map(ad => {
                 const isSelected = selectedAd?.id === ad.id;
+                const adImage = ad.profileImage || (ad.images && ad.images[0]) || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600';
                 return (
                   <button
                     key={ad.id}
@@ -156,14 +203,16 @@ export const ModerationView: React.FC = () => {
                     }`}
                   >
                     <img 
-                      src={ad.profileImage || ad.images[0]} 
-                      alt={ad.profileName} 
+                      src={adImage} 
+                      alt={ad.profileName || ad.title} 
                       className="w-10 h-10 object-cover rounded-lg border flex-shrink-0"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="min-w-0 text-xs">
+                    <div className="min-w-0 text-xs flex-1">
                       <h6 className={`font-bold truncate ${isSelected ? 'text-rose-950' : 'text-[#18181B]'}`}>{ad.title}</h6>
-                      <span className="text-[10px] font-mono block mt-0.5 capitalize">{ad.citySlug} • {ad.categorySlug}</span>
+                      <span className="text-[10px] font-mono block mt-0.5 capitalize text-slate-500">
+                        {ad.citySlug || 'India'} • {ad.categorySlug || 'Escorts'}
+                      </span>
                     </div>
                     {isSelected && (
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
@@ -182,12 +231,12 @@ export const ModerationView: React.FC = () => {
               <div className="flex justify-between items-center bg-[#F8F9FC] p-3 border rounded-xl border-[#E4E7EC] font-mono text-xs">
                 <div className="flex items-center gap-1">
                   <span className="text-slate-400">Category:</span>
-                  <strong className="text-[#18181B] capitalize">{selectedAd.categorySlug}</strong>
+                  <strong className="text-[#18181B] capitalize">{selectedAd.categorySlug || 'Classified'}</strong>
                 </div>
                 <div className="flex items-center gap-1">
                   <MapPin size={13} className="text-rose-600" />
                   <span className="text-slate-400">Metro:</span>
-                  <strong className="text-[#18181B] capitalize">{selectedAd.citySlug}</strong>
+                  <strong className="text-[#18181B] capitalize">{selectedAd.citySlug || 'Metro City'}</strong>
                 </div>
               </div>
 
@@ -195,7 +244,7 @@ export const ModerationView: React.FC = () => {
               <div className="space-y-3">
                 <h3 className="font-bold text-[#18181B] text-base border-b pb-2">{selectedAd.title}</h3>
                 <div className="text-xs text-[#667085] leading-relaxed p-4 bg-slate-50 border border-slate-100 rounded-xl whitespace-pre-wrap">
-                  {selectedAd.description}
+                  {selectedAd.description || 'No description provided.'}
                 </div>
               </div>
 
@@ -203,8 +252,8 @@ export const ModerationView: React.FC = () => {
               <div className="space-y-3">
                 <h5 className="text-xs font-bold text-[#667085] uppercase tracking-wider font-mono">Asset Imagery Gallery</h5>
                 <div className="grid grid-cols-2 gap-3">
-                  {selectedAd.images.map((img, idx) => (
-                    <div key={idx} className="relative rounded-xl overflow-hidden border border-[#E4E7EC]">
+                  {(selectedAd.images && selectedAd.images.length > 0 ? selectedAd.images : [selectedAd.coverImage || selectedAd.profileImage]).filter(Boolean).map((img, idx) => (
+                    <div key={idx} className="relative rounded-xl overflow-hidden border border-[#E4E7EC] bg-slate-100">
                       <img 
                         src={img} 
                         alt="Audited Attachment" 
@@ -223,12 +272,16 @@ export const ModerationView: React.FC = () => {
               <div className="space-y-3">
                 <h5 className="text-xs font-bold text-[#667085] uppercase tracking-wider font-mono">Dynamic Vetting Attributes</h5>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
-                  {selectedAd.attributes && Object.entries(selectedAd.attributes).map(([key, val]) => (
-                    <div key={key} className="p-2.5 border border-[#E4E7EC] bg-[#F8F9FC] rounded-xl flex justify-between">
-                      <span className="text-[#667085] capitalize">{key}</span>
-                      <strong className="text-[#18181B]">{Array.isArray(val) ? val.join(', ') : String(val)}</strong>
-                    </div>
-                  ))}
+                  {selectedAd.attributes && Object.entries(selectedAd.attributes).length > 0 ? (
+                    Object.entries(selectedAd.attributes).map(([key, val]) => (
+                      <div key={key} className="p-2.5 border border-[#E4E7EC] bg-[#F8F9FC] rounded-xl flex justify-between">
+                        <span className="text-[#667085] capitalize">{key}</span>
+                        <strong className="text-[#18181B]">{Array.isArray(val) ? val.join(', ') : String(val || 'N/A')}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 text-slate-400 text-xs italic sm:col-span-2">No custom attributes recorded.</div>
+                  )}
                 </div>
               </div>
 
@@ -249,19 +302,24 @@ export const ModerationView: React.FC = () => {
                     <span className="text-[10px] font-mono text-[#667085] uppercase block">Advertiser Account</span>
                     <div className="flex items-center gap-3">
                       <img 
-                        src={advertiser.profile.avatar} 
-                        alt={advertiser.profile.name} 
-                        className="w-9 h-9 rounded-full object-cover"
+                        src={advertiser.profile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(advertiser.name || 'User')}&background=random`} 
+                        alt={advertiser.profile?.name || advertiser.name || 'User'} 
+                        className="w-10 h-10 rounded-full object-cover border"
                         referrerPolicy="no-referrer"
                       />
                       <div className="min-w-0 font-mono text-xs">
-                        <h6 className="font-bold text-[#18181B] truncate">{advertiser.profile.name}</h6>
-                        <span className="text-[10px] text-[#667085] block">Joined: {advertiser.profile.joinedAt}</span>
+                        <h6 className="font-bold text-[#18181B] truncate">{advertiser.profile?.name || advertiser.name}</h6>
+                        <span className="text-[10px] text-[#667085] block truncate">{advertiser.email}</span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Status: <span className="font-bold text-green-700 capitalize">{advertiser.status || 'Active'}</span>
+                        </span>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 font-mono">Pulling advertiser trust logs...</p>
+                  <div className="p-4 border border-dashed border-[#E4E7EC] bg-[#F8F9FC] rounded-xl text-center">
+                    <p className="text-xs text-slate-400 font-mono">Advertiser # {selectedAd.userId || 'N/A'}</p>
+                  </div>
                 )}
 
                 {/* Guidelines Checklist block */}
@@ -269,7 +327,7 @@ export const ModerationView: React.FC = () => {
                   <span className="text-[10px] font-bold text-[#667085] uppercase block">Mandate audit guidelines:</span>
                   <div className="flex items-center gap-2">
                     <input type="checkbox" defaultChecked className="rounded border-[#E4E7EC] text-rose-600 focus:ring-rose-500" />
-                    <span>Age threshold verified</span>
+                    <span>Age threshold verified (18+)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <input type="checkbox" defaultChecked className="rounded border-[#E4E7EC] text-rose-600 focus:ring-rose-500" />
@@ -277,7 +335,7 @@ export const ModerationView: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <input type="checkbox" defaultChecked className="rounded border-[#E4E7EC] text-rose-600 focus:ring-rose-500" />
-                    <span>Excludes abusive terms</span>
+                    <span>Excludes abusive terms & prohibited media</span>
                   </div>
                 </div>
 
@@ -287,15 +345,17 @@ export const ModerationView: React.FC = () => {
               <div className="space-y-2 pt-4 border-t border-[#E4E7EC]">
                 <button 
                   onClick={handleApprove}
-                  className="w-full py-2.5 bg-green-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 hover:bg-green-700 transition-all shadow-sm"
+                  disabled={isProcessing}
+                  className="w-full py-2.5 bg-green-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 hover:bg-green-700 transition-all shadow-sm disabled:opacity-50"
                 >
                   <Check size={14} />
-                  <span>Approve & Publish</span>
+                  <span>{isProcessing ? 'Processing...' : 'Approve & Publish'}</span>
                 </button>
                 
                 <button 
                   onClick={() => setShowChangesModal(true)}
-                  className="w-full py-2.5 bg-amber-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 hover:bg-amber-700 transition-all"
+                  disabled={isProcessing}
+                  className="w-full py-2.5 bg-amber-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 hover:bg-amber-700 transition-all disabled:opacity-50"
                 >
                   <AlertCircle size={14} />
                   <span>Request Modifications</span>
@@ -303,7 +363,8 @@ export const ModerationView: React.FC = () => {
 
                 <button 
                   onClick={() => setShowRejectModal(true)}
-                  className="w-full py-2.5 bg-rose-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 hover:bg-rose-700 transition-all"
+                  disabled={isProcessing}
+                  className="w-full py-2.5 bg-rose-600 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 hover:bg-rose-700 transition-all disabled:opacity-50"
                 >
                   <X size={14} />
                   <span>Reject Listing</span>

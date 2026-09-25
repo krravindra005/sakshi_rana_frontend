@@ -45,11 +45,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
   const { route, navigateTo } = useRouter();
   
   // Tabs: 'ads', 'favorites', 'wallet', 'profile', 'security'
-  const [activeTab, setActiveTab] = useState<string>(initialTab || route.subPath || 'ads');
+  const initialActiveTab = (typeof route.searchParams.tab === 'string' ? route.searchParams.tab : null) || route.subPath || initialTab || 'ads';
+  const [activeTab, setActiveTab] = useState<string>(initialActiveTab);
 
   // Local state
   const [myAds, setMyAds] = useState<Ad[]>([]);
   const [favoriteAds, setFavoriteAds] = useState<Ad[]>([]);
+  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [wallet, setWallet] = useState<UserWallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
@@ -71,12 +73,13 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
-  // 1. Sync active tab on subpath change
+  // 1. Sync active tab on subpath or tab parameter change
   useEffect(() => {
-    if (route.subPath) {
-      setActiveTab(route.subPath);
+    const targetTab = (typeof route.searchParams.tab === 'string' ? route.searchParams.tab : null) || route.subPath || initialTab;
+    if (targetTab) {
+      setActiveTab(targetTab);
     }
-  }, [route.subPath]);
+  }, [route.subPath, route.searchParams.tab, initialTab]);
 
   // 2. Fetch all user data
   useEffect(() => {
@@ -146,14 +149,29 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
 
       // Favorites
       try {
-        const favs = await FavoritesService.getAll();
+        setFavoritesLoading(true);
+        const favs = await FavoritesService.getAll(true);
         if (mounted) setFavoriteAds(favs);
       } catch {
         if (mounted) setFavoriteAds([]);
+      } finally {
+        if (mounted) setFavoritesLoading(false);
       }
     };
+
+    const handleFavUpdated = async () => {
+      try {
+        const favs = await FavoritesService.getAll(true);
+        if (mounted) setFavoriteAds(favs);
+      } catch {}
+    };
+    window.addEventListener('favorites_updated', handleFavUpdated);
+
     fetchUserData();
-    return () => { mounted = false; };
+    return () => { 
+      mounted = false; 
+      window.removeEventListener('favorites_updated', handleFavUpdated);
+    };
   }, [activeTab]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
@@ -240,6 +258,12 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
     }
   };
 
+  const handleRemoveFavorite = async (e: React.MouseEvent, adId: string) => {
+    e.stopPropagation();
+    setFavoriteAds((prev) => prev.filter((ad) => ad.id !== adId && ad.slug !== adId));
+    await FavoritesService.removeFavorite(adId);
+  };
+
   const handleDeleteAd = async (adId: string) => {
     if (confirm('Are you sure you want to delete this advertisement publication permanently? This cannot be undone.')) {
       const deleted = await AdsService.deleteAd(adId);
@@ -313,8 +337,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             )}
 
             <button
-              onClick={() => { setActiveTab('ads'); navigateTo('/dashboard/ads'); }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition ${
+              type="button"
+              onClick={() => { setActiveTab('ads'); navigateTo('/dashboard', { tab: 'ads' }); }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
                 activeTab === 'ads' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
@@ -328,8 +353,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             </button>
 
             <button
-              onClick={() => { setActiveTab('favorites'); navigateTo('/dashboard/favorites'); }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition ${
+              type="button"
+              onClick={() => { setActiveTab('favorites'); navigateTo('/dashboard', { tab: 'favorites' }); }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
                 activeTab === 'favorites' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
@@ -343,8 +369,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             </button>
 
             <button
-              onClick={() => { setActiveTab('wallet'); navigateTo('/dashboard/wallet'); }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl transition ${
+              type="button"
+              onClick={() => { setActiveTab('wallet'); navigateTo('/dashboard', { tab: 'wallet' }); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
                 activeTab === 'wallet' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
@@ -353,8 +380,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             </button>
 
             <button
-              onClick={() => { setActiveTab('profile'); navigateTo('/dashboard/profile'); }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl transition ${
+              type="button"
+              onClick={() => { setActiveTab('profile'); navigateTo('/dashboard', { tab: 'profile' }); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
                 activeTab === 'profile' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
@@ -363,8 +391,9 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             </button>
 
             <button
-              onClick={() => { setActiveTab('security'); navigateTo('/dashboard/security'); }}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl transition ${
+              type="button"
+              onClick={() => { setActiveTab('security'); navigateTo('/dashboard', { tab: 'security' }); }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-xl transition cursor-pointer ${
                 activeTab === 'security' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
               }`}
             >
@@ -461,17 +490,37 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
             {activeTab === 'favorites' && (
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
                 <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                  <h2 className="text-lg font-bold text-slate-900">Saved Favorites</h2>
-                  <span className="text-xs font-mono text-slate-400 font-semibold">{favoriteAds.length} files saved</span>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">Saved Favorites</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Your curated collection of bookmarked advertisements</p>
+                  </div>
+                  <span className="text-xs font-mono text-slate-500 font-semibold bg-slate-100 py-1 px-2.5 rounded-lg">
+                    {favoriteAds.length} {favoriteAds.length === 1 ? 'ad' : 'ads'} saved
+                  </span>
                 </div>
 
-                {favoriteAds.length === 0 ? (
-                  <div className="text-center py-12 max-w-sm mx-auto space-y-2">
-                    <div className="w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mx-auto">
+                {favoritesLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                    <div className="w-8 h-8 border-3 border-indigo-600 border-t-transparent rounded-full animate-spin mb-3" />
+                    <span className="text-xs font-mono font-medium">Loading saved favorites...</span>
+                  </div>
+                ) : favoriteAds.length === 0 ? (
+                  <div className="text-center py-12 max-w-sm mx-auto space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">
                       <Heart className="w-6 h-6" />
                     </div>
                     <h3 className="font-bold text-slate-800">No saved favorites yet</h3>
-                    <p className="text-slate-500 text-xs">Tap the heart icon on any classified companion profile card to build your customized collection.</p>
+                    <p className="text-slate-500 text-xs leading-relaxed">
+                      Tap the heart icon on any classified advertisement to build your customized favorites collection.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigateTo('/')}
+                      className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition cursor-pointer"
+                    >
+                      <span>Explore Classifieds</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -479,23 +528,40 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
                       <div 
                         key={ad.id} 
                         onClick={() => navigateTo(`/ad/${ad.slug}`)}
-                        className="group bg-slate-50/50 rounded-xl border border-slate-100/80 p-3 flex gap-3 cursor-pointer hover:bg-slate-100/30 transition duration-200"
+                        className="group bg-white rounded-xl border border-slate-200 hover:border-indigo-200 p-3.5 flex gap-3.5 cursor-pointer hover:shadow-sm transition duration-200 relative"
                       >
-                        <div className="w-16 h-16 rounded-lg bg-slate-100 overflow-hidden shrink-0">
-                          <img src={ad.profileImage} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <div className="w-20 h-20 rounded-lg bg-slate-100 overflow-hidden shrink-0 relative">
+                          <img 
+                            src={ad.coverImage || ad.profileImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600'} 
+                            alt="" 
+                            className="w-full h-full object-cover transition duration-300 group-hover:scale-105" 
+                            referrerPolicy="no-referrer" 
+                          />
                         </div>
                         <div className="flex-1 flex flex-col justify-between py-0.5 overflow-hidden">
                           <div>
-                            <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition truncate text-xs sm:text-sm">
-                              {ad.profileName}
-                            </h4>
-                            <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="font-bold text-slate-900 group-hover:text-indigo-600 transition truncate text-sm">
+                                {ad.profileName || ad.title}
+                              </h4>
+                              <button
+                                type="button"
+                                onClick={(e) => handleRemoveFavorite(e, ad.id)}
+                                title="Remove from favorites"
+                                className="p-1 rounded-md text-rose-500 hover:bg-rose-50 hover:text-rose-600 transition shrink-0 cursor-pointer"
+                              >
+                                <Heart className="w-4 h-4 fill-rose-500 text-rose-500 hover:opacity-75" />
+                              </button>
+                            </div>
+                            <p className="text-xs text-slate-500 truncate mt-0.5">
                               {ad.title}
                             </p>
                           </div>
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono capitalize">
-                            <span>{ad.citySlug} &bull; {ad.attributes.bodyType}</span>
-                            <span className="font-bold text-indigo-600">View Profile &rarr;</span>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono capitalize pt-2 border-t border-slate-100">
+                            <span>{ad.citySlug || 'Classified'} {ad.attributes?.bodyType ? `• ${ad.attributes.bodyType}` : ''}</span>
+                            <span className="font-bold text-indigo-600 flex items-center gap-0.5 group-hover:translate-x-0.5 transition">
+                              View Profile &rarr;
+                            </span>
                           </div>
                         </div>
                       </div>

@@ -15,13 +15,29 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
   const [isFavorited, setIsFavorited] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     if (UsersService.isLoggedIn()) {
-      FavoritesService.isFavorite(ad.id).then(setIsFavorited).catch(() => {});
+      FavoritesService.isFavorite(ad.id).then((status) => {
+        if (mounted) setIsFavorited(status);
+      }).catch(() => {});
     } else {
       const favorites = UsersService.getFavorites();
       setIsFavorited(favorites.includes(ad.id));
     }
-  }, [ad.id]);
+
+    const handleFavUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ adId: string; isFavorite: boolean }>;
+      if (custom.detail && (String(custom.detail.adId) === String(ad.id) || String(custom.detail.adId) === String(ad.slug))) {
+        if (mounted) setIsFavorited(custom.detail.isFavorite);
+      }
+    };
+    window.addEventListener('favorites_updated', handleFavUpdated);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('favorites_updated', handleFavUpdated);
+    };
+  }, [ad.id, ad.slug]);
 
   const handleFavoriteClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -30,10 +46,16 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
       navigateTo(`/login?redirect=${encodeURIComponent(currentUrl)}`);
       return;
     }
-    const newStatus = await FavoritesService.toggle(ad.id);
-    setIsFavorited(newStatus);
-    if (onFavoriteToggle) {
-      onFavoriteToggle(ad.id);
+    const previous = isFavorited;
+    setIsFavorited(!previous);
+    try {
+      const newStatus = await FavoritesService.toggle(ad.id);
+      setIsFavorited(newStatus);
+      if (onFavoriteToggle) {
+        onFavoriteToggle(ad.id);
+      }
+    } catch {
+      setIsFavorited(previous);
     }
   };
 
@@ -66,15 +88,16 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
 
         {/* Favorite heart overlay */}
         <button
+          type="button"
           onClick={handleFavoriteClick}
-          className={`absolute top-3 right-3 p-2 rounded-full border backdrop-blur-md transition-colors ${
+          className={`absolute top-3 right-3 z-20 p-2 rounded-full border backdrop-blur-md transition-colors cursor-pointer ${
             isFavorited
-              ? 'bg-rose-500 text-white border-rose-500 hover:bg-rose-600'
-              : 'bg-white/80 hover:bg-white text-slate-700 border-slate-200'
+              ? 'bg-rose-500 text-white border-rose-500 hover:bg-rose-600 shadow-sm'
+              : 'bg-white/80 hover:bg-white text-slate-700 border-slate-200 shadow-xs'
           }`}
           title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <Heart className={`w-4 h-4 ${isFavorited ? 'fill-current animate-ping-once' : ''}`} />
+          <Heart className={`w-4 h-4 ${isFavorited ? 'fill-current text-white' : 'text-slate-600'}`} />
         </button>
 
         {/* Badges */}

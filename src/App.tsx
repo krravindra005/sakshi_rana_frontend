@@ -43,6 +43,7 @@ import { LocationsView } from './components/admin/LocationsView';
 import { BusinessView } from './components/admin/BusinessView';
 import { SeoView } from './components/admin/SeoView';
 import { SettingsView } from './components/admin/SettingsView';
+import { AuditLogsView } from './components/admin/AuditLogsView';
 import { PointRequestsView } from './components/admin/PointRequestsView';
 import { FolderTree, ShieldAlert, Lock, ArrowLeft } from 'lucide-react';
 
@@ -191,7 +192,8 @@ function AppContent() {
           <PointRequestsView activeRole={adminRole} />
         )}
         {route.subPath === 'seo' && <SeoView />}
-        {(route.subPath === 'settings' || route.subPath === 'audit') && <SettingsView />}
+        {route.subPath === 'settings' && <SettingsView onNavigateToAudit={() => navigateTo('/admin/audit')} />}
+        {route.subPath === 'audit' && <AuditLogsView />}
       </AdminLayout>
     );
   }

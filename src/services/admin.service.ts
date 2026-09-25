@@ -1,5 +1,5 @@
 import { apiClient, ApiResponse, ApiPaginatedResponse } from '../lib/api/client';
-import { mapApiAdToFrontendAd } from '../lib/mappers';
+import { mapApiAdToFrontendAd, mapApiUserToFrontendUser } from '../lib/mappers';
 import { Area } from '../types/api';
 import { PointsService } from './points.service';
 
@@ -15,14 +15,25 @@ export interface AreaQueryParams {
 
 export interface AdminReport {
   id: string;
-  adId: string;
-  adTitle: string;
-  reporterId: string;
+  uuid?: string;
+  adId?: string;
+  adTitle?: string;
+  ad?: any;
+  reporterId?: string;
   reporterName: string;
+  reporter?: any;
+  reportedUserId?: string;
+  reportedUserName?: string;
+  reportedUser?: any;
   reason: string;
   description: string;
   createdAt: string;
   status: 'pending' | 'resolved' | 'dismissed';
+  priority?: 'low' | 'medium' | 'high' | 'critical';
+  entityType?: 'AD' | 'USER';
+  reportedEntityId?: string;
+  assignedModerator?: string;
+  notes?: string;
 }
 
 export interface AdminPromoProduct {
@@ -52,23 +63,55 @@ export interface SeoPageConfig {
 }
 
 export interface AdminSettings {
-  siteName: string;
-  contactEmail: string;
-  maintenanceMode: boolean;
-  allowRegistration: boolean;
-  requireAdApproval: boolean;
-  maxFreeImages: number;
+  site_name?: string;
+  contact_email?: string;
+  default_country?: string;
+  currency?: string;
+  default_expiration_days?: number;
+  max_images?: number;
+  require_ad_approval?: boolean;
+  require_remoderation_after_major_edit?: boolean;
+  maintenance_mode?: boolean;
+  allow_registration?: boolean;
+  ad_points_per_day?: number;
+  min_withdrawal_points?: number;
+  age_gate_required?: boolean;
+
+  // CamelCase accessors
+  siteName?: string;
+  contactEmail?: string;
+  defaultCountry?: string;
+  defaultExpirationDays?: number;
+  maxImages?: number;
+  requireApprovalBeforePublishing?: boolean;
+  requireReModerationAfterMajorEdit?: boolean;
+  maintenanceMode?: boolean;
+  allowRegistration?: boolean;
+  requireAdApproval?: boolean;
+  maxFreeImages?: number;
+  [key: string]: any;
 }
 
 export interface AuditLog {
   id: string;
+  uuid?: string;
   adminId: string;
   adminName: string;
+  adminEmail?: string;
+  role?: string;
   action: string;
+  entityType?: string;
+  auditableType?: string;
+  auditableId?: string;
   targetType: string;
   targetId: string;
   details: string;
+  oldValues?: any;
+  newValues?: any;
+  ipAddress?: string;
+  userAgent?: string;
   createdAt: string;
+  timestamp: string;
 }
 
 
@@ -97,10 +140,35 @@ export class AdminService {
     return this.getMetrics();
   }
 
-  static async getUsers(page: number = 1, search: string = ''): Promise<any> {
+  static async getUsers(paramsOrPage: any = 1, searchStr: string = ''): Promise<any> {
+    let page = 1;
+    let q = '';
+    let status = '';
+    let role = '';
+    let perPage = 50;
+
+    if (typeof paramsOrPage === 'object' && paramsOrPage !== null) {
+      page = paramsOrPage.page || 1;
+      q = paramsOrPage.search || paramsOrPage.q || '';
+      status = paramsOrPage.status || '';
+      role = paramsOrPage.role || '';
+      perPage = paramsOrPage.per_page || 50;
+    } else if (typeof paramsOrPage === 'number') {
+      page = paramsOrPage;
+      q = searchStr || '';
+    }
+
+    const queryParts: string[] = [`page=${page}`, `per_page=${perPage}`];
+    if (q) queryParts.push(`q=${encodeURIComponent(q)}`);
+    if (status) queryParts.push(`status=${encodeURIComponent(status)}`);
+    if (role) queryParts.push(`role=${encodeURIComponent(role)}`);
+
     try {
-      const response = await apiClient.get<ApiPaginatedResponse<any>>(`/admin/users?page=${page}&search=${search}`);
-      return response.data || [];
+      const response = await apiClient.get<ApiPaginatedResponse<any>>(`/admin/users?${queryParts.join('&')}`);
+      const rawList = Array.isArray(response.data) ? response.data : ((response.data as any)?.data || []);
+      const mapped = rawList.map(mapApiUserToFrontendUser);
+      (mapped as any).meta = response.meta || (response.data as any)?.meta;
+      return mapped;
     } catch {
       return [];
     }
@@ -109,7 +177,7 @@ export class AdminService {
   static async getUserById(id: string | number): Promise<any> {
     try {
       const response = await apiClient.get<ApiResponse<any>>(`/admin/users/${id}`);
-      return response.data;
+      return mapApiUserToFrontendUser(response.data);
     } catch {
       return null;
     }
@@ -134,6 +202,28 @@ export class AdminService {
     if (status === 'suspended') return this.suspendUser(id, reason);
     if (status === 'banned') return this.banUser(id, reason);
     return this.unsuspendUser(id);
+  }
+
+  static async getRoles(): Promise<any[]> {
+    try {
+      const response = await apiClient.get<ApiResponse<any>>('/admin/roles');
+      return Array.isArray(response.data) ? response.data : ((response.data as any)?.data || []);
+    } catch {
+      return [
+        { id: 1, name: 'super_admin', label: 'Super Admin' },
+        { id: 2, name: 'admin', label: 'Admin' },
+        { id: 3, name: 'moderator', label: 'Moderator' },
+        { id: 4, name: 'finance', label: 'Finance' },
+        { id: 5, name: 'support', label: 'Support' },
+        { id: 6, name: 'advertiser', label: 'Advertiser' },
+        { id: 7, name: 'user', label: 'Regular User' },
+      ];
+    }
+  }
+
+  static async assignUserRole(userId: string | number, role: string): Promise<any> {
+    const response = await apiClient.post<ApiResponse<any>>(`/admin/users/${userId}/role`, { role });
+    return mapApiUserToFrontendUser(response.data);
   }
 
   static async getAds(status?: string, page: number = 1): Promise<any> {
@@ -179,26 +269,48 @@ export class AdminService {
     return this.approveAd(id, reason);
   }
 
-  static async getReports(status?: string): Promise<any> {
+  static async getReports(status?: string): Promise<AdminReport[]> {
     let url = '/admin/reports';
-    if (status) url += `?status=${status}`;
+    if (status && status !== 'all') url += `?status=${status}`;
 
     try {
       const response = await apiClient.get<ApiPaginatedResponse<any>>(url);
-      return (response.data || []).map((r: any) => ({
-        id: String(r.id),
-        adId: String(r.ad_id || ''),
-        adTitle: r.ad?.title || 'Reported Ad',
-        reporterId: String(r.reporter_user_id || ''),
-        reporterName: r.reporter?.name || 'User',
-        reason: r.reason_code || 'Inappropriate content',
-        description: r.description || '',
-        createdAt: r.created_at || new Date().toISOString(),
-        status: r.status || 'pending',
-      }));
+      const raw = Array.isArray(response.data) ? response.data : ((response.data as any)?.data || []);
+      return raw.map((r: any) => {
+        const reporterName = r.reporter?.profile?.display_name || r.reporter?.name || 'Anonymous User';
+        const reportedName = r.reported_user?.profile?.display_name || r.reported_user?.name || r.ad?.user?.name || 'Reported Entity';
+        const adMapped = r.ad ? mapApiAdToFrontendAd(r.ad) : undefined;
+        return {
+          id: String(r.id),
+          uuid: r.uuid,
+          adId: String(r.ad_id || ''),
+          adTitle: r.ad?.title || 'Reported Listing',
+          ad: adMapped,
+          reporterId: String(r.reporter_user_id || ''),
+          reporterName: reporterName,
+          reporter: r.reporter ? mapApiUserToFrontendUser(r.reporter) : undefined,
+          reportedUserId: String(r.reported_user_id || r.ad?.user_id || ''),
+          reportedUserName: reportedName,
+          reportedUser: r.reported_user ? mapApiUserToFrontendUser(r.reported_user) : undefined,
+          reason: r.reason_code || 'Marketplace Guideline Violation',
+          description: r.description || '',
+          createdAt: r.created_at || new Date().toISOString(),
+          status: r.status || 'pending',
+          priority: r.priority || (r.reason_code?.toLowerCase().includes('fraud') || r.reason_code?.toLowerCase().includes('underage') ? 'critical' : 'medium'),
+          entityType: r.ad_id ? 'AD' : 'USER',
+          reportedEntityId: String(r.ad_id || r.reported_user_id || ''),
+          assignedModerator: r.assigned_user?.name || (r.assigned_to ? `Moderator #${r.assigned_to}` : undefined),
+          notes: r.notes || (r.resolved_at ? `Resolved on ${new Date(r.resolved_at).toLocaleDateString()}` : undefined),
+        } as AdminReport;
+      });
     } catch {
       return [];
     }
+  }
+
+  static async claimReport(id: string | number): Promise<any> {
+    const response = await apiClient.post<ApiResponse<any>>(`/admin/reports/${id}/claim`);
+    return response.data;
   }
 
   static async resolveReport(id: string | number, actionTaken: string = 'resolved', notes?: string): Promise<any> {
@@ -379,10 +491,191 @@ export class AdminService {
     }
   }
 
-  static async getAuditLogs(): Promise<any> {
+  static async getSettings(): Promise<AdminSettings> {
     try {
-      const response = await apiClient.get<ApiPaginatedResponse<any>>('/admin/audit-logs');
-      return response.data || [];
+      const response = await apiClient.get<ApiResponse<any>>('/admin/settings');
+      const list = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+      const dict: Record<string, any> = {};
+      list.forEach((item: any) => {
+        if (item && item.key) {
+          dict[item.key] = item.value;
+        }
+      });
+
+      return {
+        // Database snake_case keys
+        site_name: dict['site_name'] ?? 'VIP Companion Network',
+        contact_email: dict['contact_email'] ?? 'compliance@discreet-escorts.in',
+        default_country: dict['default_country'] ?? 'India',
+        currency: dict['currency'] ?? 'INR',
+        default_expiration_days: Number(dict['default_expiration_days'] ?? 30),
+        max_images: Number(dict['max_images'] ?? 10),
+        require_ad_approval: dict['require_ad_approval'] !== undefined ? Boolean(dict['require_ad_approval']) : true,
+        require_remoderation_after_major_edit: dict['require_remoderation_after_major_edit'] !== undefined ? Boolean(dict['require_remoderation_after_major_edit']) : true,
+        maintenance_mode: Boolean(dict['maintenance_mode'] ?? false),
+        allow_registration: dict['allow_registration'] !== undefined ? Boolean(dict['allow_registration']) : true,
+        ad_points_per_day: Number(dict['ad_points_per_day'] ?? 100),
+        min_withdrawal_points: Number(dict['min_withdrawal_points'] ?? 500),
+        age_gate_required: dict['age_gate_required'] !== undefined ? Boolean(dict['age_gate_required']) : true,
+
+        // Backward compatibility camelCase accessors
+        siteName: dict['site_name'] ?? 'VIP Companion Network',
+        contactEmail: dict['contact_email'] ?? 'compliance@discreet-escorts.in',
+        defaultCountry: dict['default_country'] ?? 'India',
+        defaultExpirationDays: Number(dict['default_expiration_days'] ?? 30),
+        maxImages: Number(dict['max_images'] ?? 10),
+        requireApprovalBeforePublishing: dict['require_ad_approval'] !== undefined ? Boolean(dict['require_ad_approval']) : true,
+        requireReModerationAfterMajorEdit: dict['require_remoderation_after_major_edit'] !== undefined ? Boolean(dict['require_remoderation_after_major_edit']) : true,
+        maintenanceMode: Boolean(dict['maintenance_mode'] ?? false),
+        allowRegistration: dict['allow_registration'] !== undefined ? Boolean(dict['allow_registration']) : true,
+        requireAdApproval: dict['require_ad_approval'] !== undefined ? Boolean(dict['require_ad_approval']) : true,
+        maxFreeImages: Number(dict['max_images'] ?? 10),
+        ...dict,
+      };
+    } catch {
+      return {
+        site_name: 'VIP Companion Network',
+        contact_email: 'compliance@discreet-escorts.in',
+        default_country: 'India',
+        currency: 'INR',
+        default_expiration_days: 30,
+        max_images: 10,
+        require_ad_approval: true,
+        require_remoderation_after_major_edit: true,
+        maintenance_mode: false,
+        allow_registration: true,
+        ad_points_per_day: 100,
+        min_withdrawal_points: 500,
+        age_gate_required: true,
+
+        siteName: 'VIP Companion Network',
+        contactEmail: 'compliance@discreet-escorts.in',
+        defaultCountry: 'India',
+        defaultExpirationDays: 30,
+        maxImages: 10,
+        requireApprovalBeforePublishing: true,
+        requireReModerationAfterMajorEdit: true,
+        maintenanceMode: false,
+        allowRegistration: true,
+        requireAdApproval: true,
+        maxFreeImages: 10,
+      };
+    }
+  }
+
+  static async updateSetting(key: string, value: any): Promise<any> {
+    const response = await apiClient.patch<ApiResponse<any>>(`/admin/settings/${key}`, { value });
+    return response.data;
+  }
+
+  static async saveSettings(settings: Partial<AdminSettings> | Record<string, any>): Promise<any> {
+    const payload: Record<string, any> = {};
+    const allowedKeys = [
+      'site_name',
+      'contact_email',
+      'support_email',
+      'default_country',
+      'currency',
+      'default_currency',
+      'default_expiration_days',
+      'ad_expiry_days',
+      'max_images',
+      'max_images_per_ad',
+      'require_ad_approval',
+      'require_remoderation_after_major_edit',
+      'maintenance_mode',
+      'allow_registration',
+      'ad_points_per_day',
+      'min_withdrawal_points',
+      'age_gate_required'
+    ];
+
+    allowedKeys.forEach(k => {
+      if (settings[k] !== undefined) {
+        payload[k] = settings[k];
+      }
+    });
+
+    // Fallbacks if camelCase was passed
+    if (payload['site_name'] === undefined && settings.siteName !== undefined) payload['site_name'] = settings.siteName;
+    if (payload['contact_email'] === undefined && settings.contactEmail !== undefined) payload['contact_email'] = settings.contactEmail;
+    if (payload['default_country'] === undefined && settings.defaultCountry !== undefined) payload['default_country'] = settings.defaultCountry;
+    if (payload['default_expiration_days'] === undefined && settings.defaultExpirationDays !== undefined) payload['default_expiration_days'] = settings.defaultExpirationDays;
+    if (payload['max_images'] === undefined && settings.maxImages !== undefined) payload['max_images'] = settings.maxImages;
+    if (payload['require_ad_approval'] === undefined && (settings.requireApprovalBeforePublishing !== undefined || settings.requireAdApproval !== undefined)) {
+      payload['require_ad_approval'] = settings.requireApprovalBeforePublishing ?? settings.requireAdApproval;
+    }
+    if (payload['require_remoderation_after_major_edit'] === undefined && settings.requireReModerationAfterMajorEdit !== undefined) {
+      payload['require_remoderation_after_major_edit'] = settings.requireReModerationAfterMajorEdit;
+    }
+    if (payload['maintenance_mode'] === undefined && settings.maintenanceMode !== undefined) payload['maintenance_mode'] = settings.maintenanceMode;
+    if (payload['allow_registration'] === undefined && settings.allowRegistration !== undefined) payload['allow_registration'] = settings.allowRegistration;
+
+    const response = await apiClient.patch<ApiResponse<any>>('/admin/settings', payload);
+    return response.data;
+  }
+
+  static async getAuditLogs(params?: { page?: number; per_page?: number; q?: string; action?: string; entity_type?: string }): Promise<AuditLog[]> {
+    let url = '/admin/audit-logs';
+    const queryParts: string[] = [];
+    if (params?.page) queryParts.push(`page=${params.page}`);
+    if (params?.per_page) queryParts.push(`per_page=${params.per_page}`);
+    if (params?.q) queryParts.push(`q=${encodeURIComponent(params.q)}`);
+    if (params?.action) queryParts.push(`action=${encodeURIComponent(params.action)}`);
+    if (params?.entity_type) queryParts.push(`entity_type=${encodeURIComponent(params.entity_type)}`);
+    if (queryParts.length > 0) url += `?${queryParts.join('&')}`;
+
+    try {
+      const response = await apiClient.get<any>(url);
+      const rawData = response.data;
+      let items: any[] = [];
+      let meta: any = undefined;
+
+      if (Array.isArray(rawData)) {
+        items = rawData;
+      } else if (rawData && Array.isArray(rawData.data)) {
+        items = rawData.data;
+        meta = rawData.meta;
+      } else if (rawData && typeof rawData === 'object') {
+        items = Array.isArray(rawData.items) ? rawData.items : [];
+      }
+
+      const mapped = items.map((l: any) => {
+        const entity = l.auditable_type ? l.auditable_type.split('\\').pop() : (l.target_type || 'SYSTEM');
+        let detailsStr = '';
+        if (l.new_values && typeof l.new_values === 'object') {
+          detailsStr = Object.entries(l.new_values)
+            .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+            .join(' | ');
+        } else {
+          detailsStr = l.details || l.action || '';
+        }
+
+        return {
+          id: String(l.id || l.uuid),
+          uuid: l.uuid,
+          adminId: String(l.actor_user_id || l.adminId || ''),
+          adminName: l.actor?.name || l.adminName || 'System',
+          adminEmail: l.actor?.email || '',
+          role: l.actor?.role || 'Admin',
+          action: l.action || 'system.event',
+          entityType: entity?.toUpperCase() || 'SYSTEM',
+          auditableType: l.auditable_type || entity,
+          auditableId: String(l.auditable_id || ''),
+          targetType: entity || 'System',
+          targetId: String(l.auditable_id || ''),
+          details: detailsStr,
+          oldValues: l.old_values,
+          newValues: l.new_values,
+          ipAddress: l.ip_hash || '127.0.0.1',
+          userAgent: l.user_agent || '',
+          createdAt: l.created_at || new Date().toISOString(),
+          timestamp: l.created_at || new Date().toISOString(),
+        } as AuditLog;
+      });
+
+      (mapped as any).meta = meta || response.meta;
+      return mapped;
     } catch {
       return [];
     }
@@ -452,9 +745,10 @@ export const adminModerationService = {
 export const adminReportService = {
   getAllReports: () => AdminService.getReports(),
   getReports: (status?: string) => AdminService.getReports(status),
+  claimReport: (id: string | number) => AdminService.claimReport(id),
+  assignReport: (id: string | number, moderatorName?: string) => AdminService.claimReport(id),
   resolveReport: (id: string | number, actionTaken: string, notes?: string) => AdminService.resolveReport(id, actionTaken, notes),
   dismissReport: (id: string | number, notes?: string) => AdminService.dismissReport(id, notes),
-  assignReport: (id: string | number, moderatorName: string) => Promise.resolve(true),
   updateReportStatus: (id: string | number, status: string, notes?: string) => status === 'resolved' ? AdminService.resolveReport(id, 'resolved', notes) : AdminService.dismissReport(id, notes),
 };
 
@@ -490,6 +784,8 @@ export const adminUserService = {
   unsuspendUser: (id: string | number) => AdminService.unsuspendUser(id),
   banUser: (id: string | number, reason: string) => AdminService.banUser(id, reason),
   updateUserStatus: (id: string | number, status: string, reason: string = '') => AdminService.updateUserStatus(id, status, reason),
+  getRoles: () => AdminService.getRoles(),
+  assignUserRole: (userId: string | number, role: string) => AdminService.assignUserRole(userId, role),
 };
 
 export const adminBusinessService = {
@@ -647,15 +943,15 @@ export const adminSeoService = {
 };
 
 export const adminSettingsService = {
-  getAllSettings: () => apiClient.get<ApiResponse<any>>('/admin/settings').then((r) => r.data || []),
-  getSettings: () => apiClient.get<ApiResponse<any>>('/admin/settings').then((r) => r.data || []),
-  updateSetting: (key: string, val: any) => apiClient.patch<ApiResponse<any>>(`/admin/settings/${key}`, { value: val }).then((r) => r.data),
-  saveSettings: (settings: any) => apiClient.patch<ApiResponse<any>>('/admin/settings', settings).then((r) => r.data),
+  getAllSettings: () => AdminService.getSettings(),
+  getSettings: () => AdminService.getSettings(),
+  updateSetting: (key: string, val: any) => AdminService.updateSetting(key, val),
+  saveSettings: (settings: any) => AdminService.saveSettings(settings),
 };
 
 export const adminAuditService = {
-  getLogs: () => AdminService.getAuditLogs(),
-  getAuditLogs: () => AdminService.getAuditLogs(),
+  getLogs: (params?: any) => AdminService.getAuditLogs(params),
+  getAuditLogs: (params?: any) => AdminService.getAuditLogs(params),
 };
 
 export const adminPointService = {

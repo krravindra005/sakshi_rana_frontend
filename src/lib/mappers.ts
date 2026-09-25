@@ -73,3 +73,38 @@ export function mapApiAdToFrontendAd(apiAd: any): Ad {
     updatedAt: apiAd.updated_at,
   };
 }
+
+export function mapApiUserToFrontendUser(u: any): any {
+  if (!u) return null;
+  const profileName = u.profile?.display_name || u.name || 'User';
+  const avatar = u.profile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(profileName)}&background=random`;
+  const phone = u.phone || u.profile?.phone || '';
+  const joinedAt = u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Recently';
+
+  return {
+    id: String(u.id || u.uuid),
+    uuid: u.uuid,
+    name: u.name || profileName,
+    email: u.email || '',
+    role: u.role || 'user',
+    status: u.status || 'active',
+    createdAt: u.created_at || new Date().toISOString(),
+    profile: {
+      id: String(u.id || u.uuid),
+      name: profileName,
+      email: u.email || '',
+      phone: phone,
+      avatar: avatar,
+      bio: u.profile?.bio || '',
+      joinedAt: joinedAt,
+      roles: Array.isArray(u.roles) ? u.roles.map((r: any) => typeof r === 'string' ? r : r.name) : (u.role ? [u.role] : []),
+      permissions: u.permissions || [],
+    },
+    wallet: u.wallet ? {
+      balance: Number(u.wallet.balance || 0),
+      currency: u.wallet.currency || 'INR',
+      userId: String(u.id || u.uuid),
+    } : { balance: 0, currency: 'INR', userId: String(u.id || u.uuid) },
+  };
+}
+

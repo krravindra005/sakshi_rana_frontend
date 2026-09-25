@@ -116,6 +116,7 @@ export class UsersService {
 
   static async logout(): Promise<void> {
     await AuthService.logout();
+    FavoritesService.clearCache();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(this.userKey);
       localStorage.removeItem('auth_token');

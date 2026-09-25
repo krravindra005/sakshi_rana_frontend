@@ -49,9 +49,10 @@ const parseUrl = (): RouteInfo => {
     routeInfo.path = '/ad';
     routeInfo.adSlug = segments[1];
   } else if (segments[0] === 'dashboard') {
-    // /dashboard or /dashboard/[subPath]
+    // /dashboard or /dashboard/[subPath] or /dashboard?tab=[subPath]
     routeInfo.path = '/dashboard';
-    routeInfo.subPath = segments[1] || 'ads'; // defaults to ads
+    const tabParam = typeof searchParams.tab === 'string' ? searchParams.tab : (Array.isArray(searchParams.tab) ? searchParams.tab[0] : undefined);
+    routeInfo.subPath = segments[1] || tabParam || 'ads'; // defaults to ads
   } else if (segments[0] === 'admin') {
     // /admin, /admin/[subPath], /admin/[subPath]/[id]
     routeInfo.path = '/admin';
