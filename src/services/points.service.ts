@@ -40,13 +40,16 @@ export class PointsService {
   /**
    * User: Get user's own submitted point requests from existing wallet_transactions
    */
-  static async getMyRequests(status?: string, page: number = 1): Promise<PointRequest[]> {
+  static async getMyRequests(status?: string, page: number = 1, forceRefresh = false): Promise<PointRequest[]> {
     try {
       let url = `/wallet/transactions?type=point_request&page=${page}`;
       if (status && status !== 'all') {
         url += `&status=${status}`;
       }
-      const response = await apiClient.get<ApiPaginatedResponse<WalletTransaction>>(url);
+      const response = await apiClient.get<ApiPaginatedResponse<WalletTransaction>>(url, {
+        forceRefresh,
+        ttlMs: 30_000,
+      });
       const items = response.data || [];
       return items.map(mapTransactionToPointRequest);
     } catch (err) {
@@ -58,9 +61,12 @@ export class PointsService {
   /**
    * User: Get advertisement point requirements and wallet balance
    */
-  static async getAdPointsRequirement(): Promise<AdPointRequirements> {
+  static async getAdPointsRequirement(forceRefresh = false): Promise<AdPointRequirements> {
     try {
-      const response = await apiClient.get<ApiResponse<AdPointRequirements>>('/wallet/ad-points-requirement');
+      const response = await apiClient.get<ApiResponse<AdPointRequirements>>('/wallet/ad-points-requirement', {
+        forceRefresh,
+        ttlMs: 30_000,
+      });
       return response.data || {
         available_points: 0,
         daily_points_required: 100,

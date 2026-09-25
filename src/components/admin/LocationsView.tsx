@@ -221,6 +221,8 @@ export const LocationsView: React.FC<LocationsViewProps> = ({ activeRole }) => {
     }
   };
 
+  const isInitialMountRef = React.useRef(true);
+
   // Trigger initial loads on mount
   useEffect(() => {
     fetchCountries();
@@ -228,8 +230,13 @@ export const LocationsView: React.FC<LocationsViewProps> = ({ activeRole }) => {
     fetchCities();
   }, []);
 
-  // Fetch when tab or hierarchical parent filters change for non-areas
+  // Fetch when tab or hierarchical parent filters change for non-areas (skipping duplicate initial mount)
   useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+
     if (activeTab === 'countries') {
       fetchCountries();
     } else if (activeTab === 'regions') {

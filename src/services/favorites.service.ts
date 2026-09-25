@@ -4,6 +4,7 @@ import { mapApiAdToFrontendAd } from '../lib/mappers';
 
 export class FavoritesService {
   private static cachedFavoriteIds: Set<string> | null = null;
+  private static cachedFavorites: Ad[] | null = null;
   private static inFlightRequest: Promise<Ad[]> | null = null;
 
   /**
@@ -11,20 +12,36 @@ export class FavoritesService {
    */
   static clearCache(): void {
     this.cachedFavoriteIds = null;
+    this.cachedFavorites = null;
     this.inFlightRequest = null;
+  }
+
+  /**
+   * Check if current user is authenticated
+   */
+  private static isAuthenticated(): boolean {
+    return typeof window !== 'undefined' && !!localStorage.getItem('auth_token');
   }
 
   /**
    * Get all favorites of the current user via GET /api/v2/favorites
    */
   static async getAll(forceRefresh = false): Promise<Ad[]> {
+    if (!this.isAuthenticated()) {
+      return [];
+    }
+
+    if (!forceRefresh && this.cachedFavorites !== null) {
+      return this.cachedFavorites;
+    }
+
     if (this.inFlightRequest && !forceRefresh) {
       return this.inFlightRequest;
     }
 
     this.inFlightRequest = (async () => {
       try {
-        const response = await apiClient.get<ApiPaginatedResponse<any>>('/favorites');
+        const response = await apiClient.get<ApiPaginatedResponse<any>>('/favorites', { forceRefresh });
         const items = response.data || [];
         const validAds: Ad[] = [];
         const ids = new Set<string>();
@@ -43,10 +60,11 @@ export class FavoritesService {
         });
 
         this.cachedFavoriteIds = ids;
+        this.cachedFavorites = validAds;
         return validAds;
       } catch (err) {
         console.error('Failed to load favorites:', err);
-        return [];
+        return this.cachedFavorites || [];
       } finally {
         this.inFlightRequest = null;
       }
@@ -60,6 +78,7 @@ export class FavoritesService {
    */
   static async isFavorite(adSlugOrId: string): Promise<boolean> {
     if (!adSlugOrId) return false;
+    if (!this.isAuthenticated()) return false;
     const strId = String(adSlugOrId);
 
     if (this.cachedFavoriteIds !== null) {
@@ -81,16 +100,21 @@ export class FavoritesService {
   /**
    * Add favorite via POST /api/v2/favorites/{ad}
    */
-  static async addFavorite(adSlugOrId: string): Promise<boolean> {
+  static async addFavorite(adSlugOrId: string, adObj?: Ad): Promise<boolean> {
     try {
       await apiClient.post(`/favorites/${adSlugOrId}`);
       if (!this.cachedFavoriteIds) {
         this.cachedFavoriteIds = new Set<string>();
       }
       this.cachedFavoriteIds.add(String(adSlugOrId));
+      if (adObj && this.cachedFavorites) {
+        if (!this.cachedFavorites.some((a) => String(a.id) === String(adObj.id))) {
+          this.cachedFavorites.push(adObj);
+        }
+      }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('favorites_updated', {
-          detail: { adId: String(adSlugOrId), isFavorite: true }
+          detail: { adId: String(adSlugOrId), isFavorite: true, ad: adObj }
         }));
       }
       return true;
@@ -108,6 +132,11 @@ export class FavoritesService {
       await apiClient.delete(`/favorites/${adSlugOrId}`);
       if (this.cachedFavoriteIds) {
         this.cachedFavoriteIds.delete(String(adSlugOrId));
+      }
+      if (this.cachedFavorites) {
+        this.cachedFavorites = this.cachedFavorites.filter(
+          (a) => String(a.id) !== String(adSlugOrId) && String(a.slug) !== String(adSlugOrId)
+        );
       }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('favorites_updated', {

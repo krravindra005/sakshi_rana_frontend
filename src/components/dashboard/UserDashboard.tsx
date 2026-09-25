@@ -150,7 +150,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
       // Favorites
       try {
         setFavoritesLoading(true);
-        const favs = await FavoritesService.getAll(true);
+        const favs = await FavoritesService.getAll(false);
         if (mounted) setFavoriteAds(favs);
       } catch {
         if (mounted) setFavoriteAds([]);
@@ -159,11 +159,22 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
       }
     };
 
-    const handleFavUpdated = async () => {
-      try {
-        const favs = await FavoritesService.getAll(true);
-        if (mounted) setFavoriteAds(favs);
-      } catch {}
+    const handleFavUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ adId: string; isFavorite: boolean; ad?: Ad }>;
+      if (custom.detail) {
+        if (!custom.detail.isFavorite) {
+          if (mounted) {
+            setFavoriteAds((prev) =>
+              prev.filter((ad) => String(ad.id) !== String(custom.detail.adId) && String(ad.slug) !== String(custom.detail.adId))
+            );
+          }
+        } else if (custom.detail.ad && mounted) {
+          setFavoriteAds((prev) => {
+            if (prev.some((a) => String(a.id) === String(custom.detail.ad!.id))) return prev;
+            return [...prev, custom.detail.ad!];
+          });
+        }
+      }
     };
     window.addEventListener('favorites_updated', handleFavUpdated);
 
@@ -172,7 +183,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
       mounted = false; 
       window.removeEventListener('favorites_updated', handleFavUpdated);
     };
-  }, [activeTab]);
+  }, []);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,10 +234,10 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
 
       // Refresh data
       const [reqs, adStats, w, txs] = await Promise.all([
-        PointsService.getMyRequests(),
-        PointsService.getAdPointsRequirement(),
-        WalletService.getWallet(),
-        WalletService.getTransactions()
+        PointsService.getMyRequests(undefined, 1, true),
+        PointsService.getAdPointsRequirement(true),
+        WalletService.getWallet(true),
+        WalletService.getTransactions(true)
       ]);
       setPointRequests(reqs);
       setAdPointStats(adStats);

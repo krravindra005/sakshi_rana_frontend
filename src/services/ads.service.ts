@@ -6,9 +6,12 @@ export class AdsService {
   /**
    * Get all published ads via API V2
    */
-  static async getAll(): Promise<Ad[]> {
+  static async getAll(forceRefresh = false): Promise<Ad[]> {
     try {
-      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads');
+      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads', {
+        forceRefresh,
+        ttlMs: 60_000,
+      });
       const items = response.data || [];
       return items.map(mapApiAdToFrontendAd);
     } catch {
@@ -19,9 +22,12 @@ export class AdsService {
   /**
    * Get featured advertisements via API V2
    */
-  static async getFeatured(limit?: number): Promise<Ad[]> {
+  static async getFeatured(limit?: number, forceRefresh = false): Promise<Ad[]> {
     try {
-      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads?featured=true');
+      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads?featured=true', {
+        forceRefresh,
+        ttlMs: 60_000,
+      });
       const items = (response.data || []).map(mapApiAdToFrontendAd);
       return limit ? items.slice(0, limit) : items;
     } catch {
@@ -32,8 +38,8 @@ export class AdsService {
   /**
    * Get latest advertisements
    */
-  static async getLatest(limit?: number): Promise<Ad[]> {
-    const all = await this.getAll();
+  static async getLatest(limit?: number, forceRefresh = false): Promise<Ad[]> {
+    const all = await this.getAll(forceRefresh);
     return limit ? all.slice(0, limit) : all;
   }
 

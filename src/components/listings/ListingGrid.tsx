@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
 import { SearchService } from '../../services/search.service';
@@ -43,11 +43,8 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
   const [currentPage, setCurrentPage] = useState(1);
   const adsPerPage = 6;
 
-  // Active filter state, synchronized with route URL query parameters
-  const [activeFilters, setActiveFilters] = useState<FilterOptions>({});
-
-  // 1. Sync local filters state with URL query search parameters on load
-  useEffect(() => {
+  // Compute filter options from route props & query parameters
+  const computeInitialFilters = useCallback((): FilterOptions => {
     const filters: FilterOptions = {
       category: categorySlug || route.searchParams.category || undefined,
       city: citySlug || route.searchParams.city || undefined,
@@ -56,16 +53,28 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
       is_featured: route.searchParams.is_featured === 'true' ? true : undefined,
     };
 
-    // Include any custom query parameters
     Object.entries(route.searchParams).forEach(([key, val]) => {
       if (!['category', 'city', 'area', 'q', 'sort', 'page', 'is_verified', 'is_featured'].includes(key) && val) {
         filters[key] = typeof val === 'string' && val.includes(',') ? val.split(',') : val;
       }
     });
 
-    setActiveFilters(filters);
+    return filters;
+  }, [categorySlug, citySlug, route.searchParams]);
+
+  // Active filter state initialized synchronously from route
+  const [activeFilters, setActiveFilters] = useState<FilterOptions>(computeInitialFilters);
+  const lastSearchRef = useRef<string>('');
+
+  // 1. Sync local filters state with URL query search parameters on changes
+  useEffect(() => {
+    const filters = computeInitialFilters();
+    setActiveFilters((prev) => {
+      if (JSON.stringify(prev) === JSON.stringify(filters)) return prev;
+      return filters;
+    });
     setCurrentPage(1);
-  }, [categorySlug, citySlug, JSON.stringify(route.searchParams)]);
+  }, [computeInitialFilters]);
 
   // 2. Fetch category and city names for breadcrumbs and headings
   useEffect(() => {
@@ -89,28 +98,32 @@ export const ListingGrid: React.FC<ListingGridProps> = ({ categorySlug, citySlug
     fetchMeta();
   }, [categorySlug, citySlug]);
 
-  // 3. Search and filter ads on filter/sort change
+  // 3. Search and filter ads on filter/sort change with deduplication
   useEffect(() => {
+    const keyword = route.searchParams.q || '';
+    const searchSignature = `${JSON.stringify(activeFilters)}|${sortBy}|${keyword}`;
+    
+    // Prevent duplicate searches with exact same criteria
+    if (lastSearchRef.current === searchSignature) {
+      return;
+    }
+    lastSearchRef.current = searchSignature;
+
     const fetchFilteredAds = async () => {
       setLoading(true);
       try {
-        const keyword = route.searchParams.q || '';
         const results = await SearchService.search(activeFilters, keyword, sortBy);
         setAds(results);
       } catch (err) {
         console.error('Error searching ads', err);
       } finally {
-        // Slow down slightly for beautiful skeleton effect
         setTimeout(() => {
           setLoading(false);
         }, 300);
       }
     };
     
-    // Only search once activeFilters state is correctly aligned
-    if (Object.keys(activeFilters).length > 0 || !categorySlug) {
-      fetchFilteredAds();
-    }
+    fetchFilteredAds();
   }, [activeFilters, sortBy, route.searchParams.q]);
 
   // Handle active filter updates & synchronize with URL Query Params

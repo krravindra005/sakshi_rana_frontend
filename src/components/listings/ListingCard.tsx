@@ -12,7 +12,13 @@ interface ListingCardProps {
 
 export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }) => {
   const { navigateTo } = useRouter();
-  const [isFavorited, setIsFavorited] = useState(false);
+  const [isFavorited, setIsFavorited] = useState<boolean>(() => {
+    if (UsersService.isLoggedIn()) {
+      return FavoritesService.isFavoriteSync(ad.id) || FavoritesService.isFavoriteSync(ad.slug);
+    }
+    const favorites = UsersService.getFavorites();
+    return favorites.includes(ad.id) || favorites.includes(ad.slug);
+  });
 
   useEffect(() => {
     let mounted = true;
