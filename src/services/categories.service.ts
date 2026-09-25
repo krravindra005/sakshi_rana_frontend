@@ -3,11 +3,16 @@ import { Category } from '../types/api';
 
 export class CategoriesService {
   /**
-   * Fetch all active categories from API V2
+   * Fetch all active categories from API V2 (/categories)
    */
   static async getAll(): Promise<Category[]> {
-    const response = await apiClient.get<ApiResponse<Category[]>>('/categories');
-    return response.data || [];
+    try {
+      const response = await apiClient.get<ApiResponse<Category[]>>('/categories');
+      return response.data || [];
+    } catch (err) {
+      console.error('Failed to fetch categories from /categories API:', err);
+      throw err;
+    }
   }
 
   /**

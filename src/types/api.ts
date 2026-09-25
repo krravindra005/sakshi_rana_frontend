@@ -36,6 +36,7 @@ export interface Category {
   parent_id?: number | null;
   sort_order: number;
   is_active: boolean;
+  listing_count?: number;
   subcategories?: Category[];
 }
 
@@ -60,31 +61,42 @@ export interface DynamicFilter {
 
 export interface Country {
   id: number;
-  uuid: string;
+  uuid?: string;
   name: string;
-  code: string;
-  phone_code: string;
-  currency_code: string;
-  sort_order: number;
+  slug?: string;
+  code?: string;
+  iso2?: string;
+  iso3?: string;
+  phone_code?: string;
+  currency_code?: string;
+  sort_order?: number;
+  is_active?: boolean;
 }
 
 export interface Region {
   id: number;
-  uuid: string;
+  uuid?: string;
   country_id: number;
   name: string;
+  slug?: string;
   code?: string;
-  sort_order: number;
+  sort_order?: number;
+  is_active?: boolean;
 }
 
 export interface City {
   id: number;
-  uuid: string;
+  uuid?: string;
   region_id: number;
   name: string;
   slug: string;
-  is_featured: boolean;
-  sort_order: number;
+  image?: string;
+  is_featured?: boolean;
+  sort_order?: number;
+  ads_count?: number;
+  active_ads_count?: number;
+  is_active?: boolean;
+  areas?: Area[];
 }
 
 export interface Area {

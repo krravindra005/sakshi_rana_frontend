@@ -4,7 +4,7 @@ import { useAdvancedSearch } from '../../context/AdvancedSearchContext';
 import { CategoriesService } from '../../services/categories.service';
 import { LocationsService } from '../../services/locations.service';
 import { UsersService } from '../../services/users.service';
-import { Category } from '../../types/category';
+import { Category } from '../../types/api';
 import { City } from '../../types/location';
 import { 
   Sparkles, 
@@ -21,7 +21,9 @@ import {
   Settings,
   HelpCircle,
   SlidersHorizontal,
-  LogIn
+  LogIn,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -38,17 +40,36 @@ export const Header: React.FC = () => {
   const [currentUser, setCurrentUser] = useState(UsersService.getProfile());
   const [wallet, setWallet] = useState(UsersService.getWallet());
 
+  // Dynamic API state for categories
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
+
   const [cities, setCities] = useState<City[]>([]);
 
   const megaMenuRef = useRef<HTMLDivElement>(null);
   const locationRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
+  // Dynamic category fetcher calling /categories API
+  const loadCategories = async () => {
+    try {
+      setCategoriesLoading(true);
+      setCategoriesError(null);
+      const data = await CategoriesService.getAll();
+      setCategories(data);
+    } catch (err: any) {
+      console.error('Failed to fetch categories:', err);
+      setCategoriesError('Unable to load categories. Please try again.');
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
+
   // Subscribe to auth state updates and fetch data
   useEffect(() => {
-    CategoriesService.getAll().then(setCategories);
-    LocationsService.getCities().then(setCities);
+    loadCategories();
+    LocationsService.getCities().then(setCities).catch(() => {});
 
     const handleAuthStateChange = () => {
       setIsLoggedIn(UsersService.isLoggedIn());
@@ -58,7 +79,6 @@ export const Header: React.FC = () => {
     window.addEventListener('auth_state_changed', handleAuthStateChange);
     return () => window.removeEventListener('auth_state_changed', handleAuthStateChange);
   }, []);
-
 
   // Close menus when clicking outside
   useEffect(() => {
@@ -87,12 +107,18 @@ export const Header: React.FC = () => {
 
   const handleSelectCity = (citySlug: string) => {
     setIsLocationDropdownOpen(false);
-    // Find active category slug or default to first category, or just search by city
-    const activeCategory = route.category || 'call-girls';
-    navigateTo(`/${activeCategory}/${citySlug}`);
+    if (route.category) {
+      navigateTo(`/${route.category}/${citySlug}`);
+    } else if (categories.length > 0) {
+      navigateTo(`/${categories[0].slug}/${citySlug}`);
+    } else {
+      navigateTo('/category-city', { city: citySlug });
+    }
   };
 
-  const currentCityName = cities.find(c => c.slug === route.city)?.name || 'Select Location';
+  const currentCityName = route.city 
+    ? (cities.find(c => c.slug === route.city)?.name || route.city.charAt(0).toUpperCase() + route.city.slice(1))
+    : 'Select Location';
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
@@ -131,18 +157,22 @@ export const Header: React.FC = () => {
                 <div className="absolute left-0 mt-2 w-56 rounded-xl bg-white border border-slate-100 shadow-lg py-2 z-50">
                   <p className="text-xs font-semibold text-slate-400 px-4 py-1 uppercase tracking-wider font-mono">Popular Cities</p>
                   <div className="max-h-64 overflow-y-auto mt-1">
-                    {cities.map((city) => (
-                      <button
-                        key={city.id}
-                        onClick={() => handleSelectCity(city.slug)}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 transition flex items-center justify-between ${
-                          route.city === city.slug ? 'text-indigo-600 font-semibold bg-indigo-50/30' : 'text-slate-700'
-                        }`}
-                      >
-                        <span>{city.name}</span>
-                        <span className="text-xs text-slate-400 font-mono">{city.activeAdsCount} ads</span>
-                      </button>
-                    ))}
+                    {cities.length === 0 ? (
+                      <p className="text-xs text-slate-400 px-4 py-2">No locations available.</p>
+                    ) : (
+                      cities.map((city) => (
+                        <button
+                          key={city.id}
+                          onClick={() => handleSelectCity(city.slug)}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-slate-50 transition flex items-center justify-between ${
+                            route.city === city.slug ? 'text-indigo-600 font-semibold bg-indigo-50/30' : 'text-slate-700'
+                          }`}
+                        >
+                          <span>{city.name}</span>
+                          <span className="text-xs text-slate-400 font-mono">{city.activeAdsCount || 0} ads</span>
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -178,52 +208,123 @@ export const Header: React.FC = () => {
             <div className="relative">
               <button
                 id="mega-menu-trigger"
+                type="button"
                 onClick={() => setIsMegaMenuOpen(!isMegaMenuOpen)}
                 className={`flex items-center gap-1 py-2 px-3 text-sm font-medium rounded-lg transition ${
                   isMegaMenuOpen ? 'text-slate-900 bg-slate-50' : 'text-slate-600 hover:text-slate-900'
                 }`}
+                aria-expanded={isMegaMenuOpen}
               >
                 <span>Categories</span>
-                <ChevronDown className={`w-4 h-4 transition ${isMegaMenuOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMegaMenuOpen ? 'rotate-180 text-slate-900' : 'text-slate-400'}`} />
               </button>
 
               {/* Mega Menu Container */}
               {isMegaMenuOpen && (
-                <div className="absolute right-0 lg:-right-36 mt-2 w-[540px] rounded-2xl bg-white border border-slate-100 shadow-xl p-5 grid grid-cols-2 gap-4 z-50">
-                  {categories.map((cat) => (
-                    <div key={cat.id} className="border-r border-slate-50 last:border-0 pr-3">
-                      <h4 
-                        onClick={() => {
-                          setIsMegaMenuOpen(false);
-                          navigateTo(`/${cat.slug}/delhi`);
-                        }}
-                        className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 flex items-center gap-1.5 cursor-pointer hover:text-indigo-600"
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        {cat.name}
-                      </h4>
-                      <div className="grid grid-cols-2 gap-x-2 gap-y-1">
-                        {cat.popularCities.slice(0, 4).map((city) => (
-                          <button
-                            key={city}
-                            onClick={() => {
-                              setIsMegaMenuOpen(false);
-                              const citySlug = city.toLowerCase();
-                              navigateTo(`/${cat.slug}/${citySlug}`);
-                            }}
-                            className="text-left text-xs text-slate-500 hover:text-indigo-600 transition truncate py-0.5"
-                          >
-                            {city}
-                          </button>
-                        ))}
-                      </div>
+                <div className="absolute right-0 lg:-right-36 mt-2 w-[540px] max-w-[90vw] rounded-2xl bg-white border border-slate-100 shadow-xl p-5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  {categoriesLoading ? (
+                    <div className="py-8 flex flex-col items-center justify-center text-slate-400 gap-2">
+                      <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
+                      <span className="text-xs font-medium">Loading categories...</span>
                     </div>
-                  ))}
-                  <div className="col-span-2 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-400 font-medium">All companion listings are verified. No direct explicit contents are hosted.</span>
+                  ) : categoriesError ? (
+                    <div className="py-6 flex flex-col items-center justify-center text-center gap-2">
+                      <div className="flex items-center gap-1.5 text-xs text-rose-500 font-medium">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>{categoriesError}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          loadCategories();
+                        }}
+                        className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg text-xs font-semibold transition"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  ) : categories.length === 0 ? (
+                    <div className="py-6 text-center text-slate-400 text-xs">
+                      No categories available.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[420px] overflow-y-auto">
+                      {categories.map((cat) => {
+                        const hasSubcategories = cat.subcategories && cat.subcategories.length > 0;
+                        const targetUrl = route.city ? `/${cat.slug}/${route.city}` : `/${cat.slug}`;
+
+                        return (
+                          <div 
+                            key={cat.id} 
+                            className="p-3 rounded-xl border border-slate-100 hover:border-indigo-100 hover:bg-indigo-50/20 transition group flex flex-col justify-between"
+                          >
+                            <div>
+                              <div 
+                                onClick={() => {
+                                  setIsMegaMenuOpen(false);
+                                  navigateTo(targetUrl);
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <div className="flex items-center justify-between gap-1.5 mb-1">
+                                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider group-hover:text-indigo-600 transition flex items-center gap-1.5 truncate">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                    <span className="truncate">{cat.name}</span>
+                                  </h4>
+                                  {cat.listing_count !== undefined && (
+                                    <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                      {cat.listing_count} {cat.listing_count === 1 ? 'ad' : 'ads'}
+                                    </span>
+                                  )}
+                                </div>
+                                {cat.description && (
+                                  <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mb-2">
+                                    {cat.description}
+                                  </p>
+                                )}
+                              </div>
+
+                              {hasSubcategories && (
+                                <div className="flex flex-col gap-1 pt-2 border-t border-slate-100">
+                                  {cat.subcategories!.map((sub) => (
+                                    <button
+                                      key={sub.id}
+                                      onClick={() => {
+                                        setIsMegaMenuOpen(false);
+                                        navigateTo(route.city ? `/${sub.slug}/${route.city}` : `/${sub.slug}`);
+                                      }}
+                                      className="text-left text-xs text-slate-500 hover:text-indigo-600 transition truncate py-0.5"
+                                    >
+                                      {sub.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setIsMegaMenuOpen(false);
+                                navigateTo(targetUrl);
+                              }}
+                              className="mt-2 text-[11px] text-indigo-600 hover:text-indigo-700 font-semibold text-left transition"
+                            >
+                              Explore {cat.name} &rarr;
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium text-[11px]">
+                      All companion listings are verified. No direct explicit contents are hosted.
+                    </span>
                     <button 
                       onClick={() => { setIsMegaMenuOpen(false); navigateTo('/safety'); }}
-                      className="text-indigo-600 hover:underline font-semibold"
+                      className="text-indigo-600 hover:underline font-semibold shrink-0 ml-2"
                     >
                       Safety Center
                     </button>
@@ -312,15 +413,6 @@ export const Header: React.FC = () => {
                         <Settings className="w-4 h-4 text-slate-400" />
                         Profile Settings
                       </button>
-                      {(currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator' || currentUser?.role === 'finance' || currentUser?.role === 'support' || (currentUser?.roles && currentUser.roles.length > 0)) && (
-                        <button
-                          onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/admin/dashboard'); }}
-                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-rose-700 bg-rose-50 font-bold hover:bg-rose-100 rounded-lg transition my-1"
-                        >
-                          <ShieldCheck className="w-4 h-4 text-rose-600" />
-                          Admin Console
-                        </button>
-                      )}
                     </div>
                     <div className="border-t border-slate-50 p-1">
                       <button
@@ -371,27 +463,29 @@ export const Header: React.FC = () => {
             </button>
 
             {/* Mobile Location */}
-            <div>
-              <p className="text-xs font-semibold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Select Location</p>
-              <div className="grid grid-cols-3 gap-2">
-                {cities.slice(0, 6).map((city) => (
-                  <button
-                    key={city.id}
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      handleSelectCity(city.slug);
-                    }}
-                    className={`py-1.5 px-2 text-xs text-center border rounded-lg font-medium transition ${
-                      route.city === city.slug 
-                        ? 'bg-slate-900 text-white border-slate-900' 
-                        : 'bg-slate-50 text-slate-700 border-slate-200/60 hover:bg-slate-100'
-                    }`}
-                  >
-                    {city.name}
-                  </button>
-                ))}
+            {cities.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">Select Location</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {cities.slice(0, 6).map((city) => (
+                    <button
+                      key={city.id}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        handleSelectCity(city.slug);
+                      }}
+                      className={`py-1.5 px-2 text-xs text-center border rounded-lg font-medium transition ${
+                        route.city === city.slug 
+                          ? 'bg-slate-900 text-white border-slate-900' 
+                          : 'bg-slate-50 text-slate-700 border-slate-200/60 hover:bg-slate-100'
+                      }`}
+                    >
+                      {city.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Mobile Search */}
             <form onSubmit={(e) => { e.preventDefault(); handleSearchSubmit(e); setIsMobileMenuOpen(false); }} className="relative">
@@ -420,19 +514,35 @@ export const Header: React.FC = () => {
             <div>
               <p className="text-xs font-semibold text-slate-400 mb-2 uppercase font-mono tracking-wider">Browse Categories</p>
               <div className="space-y-1">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => {
-                      setIsMobileMenuOpen(false);
-                      navigateTo(`/${cat.slug}/delhi`);
-                    }}
-                    className="w-full flex items-center justify-between py-2 px-3 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition"
-                  >
-                    <span>{cat.name}</span>
-                    <span className="text-xs text-slate-400 font-mono">{cat.listingCount} ads</span>
-                  </button>
-                ))}
+                {categoriesLoading ? (
+                  <div className="py-2 text-xs text-slate-400 flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                    <span>Loading categories...</span>
+                  </div>
+                ) : categoriesError ? (
+                  <div className="flex items-center justify-between text-xs py-2 text-rose-500">
+                    <span>{categoriesError}</span>
+                    <button onClick={loadCategories} className="text-indigo-600 underline font-semibold">Retry</button>
+                  </div>
+                ) : categories.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-1">No categories available.</p>
+                ) : (
+                  categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => {
+                        setIsMobileMenuOpen(false);
+                        navigateTo(route.city ? `/${cat.slug}/${route.city}` : `/${cat.slug}`);
+                      }}
+                      className="w-full flex items-center justify-between py-2 px-3 text-sm text-slate-700 hover:bg-slate-50 rounded-lg transition"
+                    >
+                      <span>{cat.name}</span>
+                      {cat.listing_count !== undefined && (
+                        <span className="text-xs text-slate-400 font-mono">{cat.listing_count} ads</span>
+                      )}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 

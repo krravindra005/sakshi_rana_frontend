@@ -254,6 +254,28 @@ export class AdminService {
     return response.data;
   }
 
+  static async searchUser(query: string): Promise<any[]> {
+    try {
+      const q = encodeURIComponent(query.trim());
+      const response = await apiClient.get<any>(`/admin/search-user?query=${q}&user=${q}&search=${q}&q=${q}`);
+      const raw = response.data;
+      if (Array.isArray(raw)) return raw;
+      if (raw && typeof raw === 'object') return [raw];
+      return [];
+    } catch {
+      try {
+        const q = encodeURIComponent(query.trim());
+        const response = await apiClient.get<any>(`/search-user?query=${q}&user=${q}&search=${q}&q=${q}`);
+        const raw = response.data;
+        if (Array.isArray(raw)) return raw;
+        if (raw && typeof raw === 'object') return [raw];
+        return [];
+      } catch {
+        return [];
+      }
+    }
+  }
+
   static async getCategories(): Promise<any> {
     try {
       const response = await apiClient.get<ApiResponse<any>>('/admin/categories');
@@ -456,12 +478,14 @@ export const adminWalletService = {
   getTransactions: () => AdminService.getWalletTransactions(),
   adjustWallet: (userId: number, amount: number, direction: 'credit' | 'debit', reason: string) => AdminService.manualWalletAdjustment(userId, amount, direction, reason),
   performWalletAdjustment: (userId: number, amount: number, direction: 'credit' | 'debit', reason: string) => AdminService.manualWalletAdjustment(userId, amount, direction, reason),
+  searchUser: (query: string) => AdminService.searchUser(query),
 };
 
 export const adminUserService = {
   getAllUsers: () => AdminService.getUsers(),
   getUsers: (page?: number, search?: string) => AdminService.getUsers(page, search),
   getUserById: (id: string | number) => AdminService.getUserById(id),
+  searchUser: (query: string) => AdminService.searchUser(query),
   suspendUser: (id: string | number, reason: string) => AdminService.suspendUser(id, reason),
   unsuspendUser: (id: string | number) => AdminService.unsuspendUser(id),
   banUser: (id: string | number, reason: string) => AdminService.banUser(id, reason),

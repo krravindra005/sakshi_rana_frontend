@@ -41,12 +41,18 @@ export interface WalletTransaction {
   type: string;
   direction?: 'credit' | 'debit';
   description: string;
-  date: string;
+  date?: string;
+  created_at?: string;
   status: 'completed' | 'pending' | 'failed';
   balance_before?: number;
   balance_after?: number;
   reference_id?: string;
   created_by?: string | number;
+  user?: {
+    id: number | string;
+    name: string;
+    email: string;
+  };
 }
 
 export interface Favorite {

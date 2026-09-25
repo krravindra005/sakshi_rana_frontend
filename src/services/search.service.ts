@@ -105,7 +105,8 @@ export class SearchService {
       const response = await apiClient.get<ApiPaginatedResponse<any>>(`/search/ads?${queryStr}`);
       const items = response.data || [];
       return items.map(mapApiAdToFrontendAd);
-    } catch {
+    } catch (err) {
+      console.error('Error searching advertisements:', err);
       return [];
     }
   }

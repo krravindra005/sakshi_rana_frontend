@@ -22,10 +22,11 @@ export class LocationsService {
   /**
    * Get all active cities (or filtered by region/featured) from API V2
    */
-  static async getCities(regionId?: string | number, featured?: boolean): Promise<City[]> {
+  static async getCities(regionId?: string | number, featured?: boolean, countryId?: string | number): Promise<City[]> {
     let url = '/locations/cities';
     const params: string[] = [];
     if (regionId) params.push(`region_id=${regionId}`);
+    if (countryId) params.push(`country_id=${countryId}`);
     if (featured) params.push(`featured=true`);
     if (params.length > 0) url += `?${params.join('&')}`;
 

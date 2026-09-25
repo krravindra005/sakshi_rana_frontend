@@ -99,8 +99,7 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
       items: [
         { id: 'point-requests', name: 'Point Requests', icon: Coins, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['points.view', 'points.manage', 'wallet.adjust'], badge: pendingPointCount || undefined },
         { id: 'promotions', name: 'Promotions Catalog', icon: Sparkles, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['promotions.view', 'promotions.manage'] },
-        { id: 'payments', name: 'Fiat Payments', icon: DollarSign, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['payments.view'] },
-        { id: 'wallet', name: 'Wallet Ledger', icon: Coins, roles: ['Super Admin', 'Admin', 'Finance'], permissions: ['wallet.view', 'wallet.transactions'] }
+       
       ]
     },
     {
