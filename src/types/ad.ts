@@ -69,7 +69,10 @@ export interface Advertisement {
     areaId?: string;
   };
   citySlug: string; // Backward compatibility
+  cityName?: string;
   areaSlug?: string; // Backward compatibility
+  areaName?: string;
+  price?: number;
   title: string;
   description: string;
   images: string[];
@@ -99,6 +102,7 @@ export interface Advertisement {
   postedAt: string; // Backward compatibility
   profileName: string; // Backward compatibility
   profileImage: string; // Backward compatibility
+  user?: any;
   publishedAt?: string;
   expiresAt?: string;
   createdAt?: string;

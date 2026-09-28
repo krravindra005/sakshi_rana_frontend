@@ -142,10 +142,17 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
             <h3 className="text-lg font-bold text-slate-900 truncate group-hover:text-indigo-600 transition">
               {ad.profileName}
             </h3>
-            <span className="text-xs text-slate-400 font-mono font-medium flex items-center gap-1">
-              <Eye className="w-3.5 h-3.5" />
-              {ad.viewsCount ?? (ad as any).view_count ?? (ad as any).viewCount ?? 0}
-            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              {ad.price !== undefined && ad.price !== null && ad.price > 0 && (
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 font-mono">
+                  ₹{ad.price.toLocaleString()}
+                </span>
+              )}
+              <span className="text-xs text-slate-400 font-mono font-medium flex items-center gap-1">
+                <Eye className="w-3.5 h-3.5" />
+                {ad.viewsCount ?? (ad as any).view_count ?? (ad as any).viewCount ?? 0}
+              </span>
+            </div>
           </div>
 
           <h4 className="text-xs font-semibold text-slate-700 leading-tight mb-2 truncate">

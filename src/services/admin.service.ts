@@ -173,7 +173,7 @@ export class AdminService {
         return (Date.now() - new Date(u.createdAt).getTime()) <= (7 * 86400 * 1000);
       }).length : 14;
 
-      const calculatedReports = reportsList.length > 0 ? reportsList.filter(r => r.status === 'pending' || r.status === 'open').length : 5;
+      const calculatedReports = reportsList.length > 0 ? reportsList.filter(r => r.status === 'pending' || (r.status as string) === 'open').length : 5;
       const calculatedRevenue = paymentsList.length > 0 ? paymentsList.reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0) : 125000;
 
       return {
@@ -779,7 +779,7 @@ export const adminDashboardService = {
 
       const cityDemographics = cityList.length > 0 ? cityList.slice(0, 6).map(city => ({
         name: city.name,
-        ads: city.activeAdsCount || (city as any).ads_count || Math.floor(Math.random() * 80 + 20)
+        ads: city.active_ads_count || (city as any).ads_count || Math.floor(Math.random() * 80 + 20)
       })) : [
         { name: 'Mumbai', ads: 120 },
         { name: 'Delhi', ads: 98 },

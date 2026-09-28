@@ -123,12 +123,22 @@ export const CityBrowse: React.FC = () => {
       : LocationsService.getCities(undefined, undefined, selectedCountryId);
 
     fetchPromise
-      .then((data) => {
+      .then(async (data) => {
         if (!isMounted) return;
-        setCities(data);
-        // Automatically select the first city so areas load immediately
-        if (data.length > 0) {
-          setSelectedCity(data[0]);
+        if (data.length === 0 && selectedRegionId) {
+          // Fallback to all cities in country if region filter returns 0
+          const allCities = await LocationsService.getCities(undefined, undefined, selectedCountryId);
+          if (isMounted) {
+            setCities(allCities);
+            if (allCities.length > 0) {
+              setSelectedCity(allCities[0]);
+            }
+          }
+        } else {
+          setCities(data);
+          if (data.length > 0) {
+            setSelectedCity(data[0]);
+          }
         }
       })
       .catch((err) => {
