@@ -71,7 +71,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({ ad, onFavoriteToggle }
 
   return (
     <div
-      onClick={() => navigateTo(`/ad/${ad.slug}`)}
+      onClick={() => navigateTo(`/ad/${ad.slug || ad.id}`)}
       className={`group cursor-pointer bg-white overflow-hidden rounded-2xl border transition duration-300 relative flex flex-col justify-between ${
         ad.isFeatured 
           ? 'border-amber-200 ring-2 ring-amber-400/10 shadow-md hover:shadow-lg' 

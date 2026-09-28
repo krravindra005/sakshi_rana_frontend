@@ -73,6 +73,28 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
 
+  // Ad Status Filter State ('active', 'all', 'published', 'pending', 'rejected', 'paused')
+  const [adFilterStatus, setAdFilterStatus] = useState<'active' | 'all' | 'published' | 'pending' | 'rejected' | 'paused'>('active');
+
+  // Delete Ad confirmation modal states
+  const [adToDelete, setAdToDelete] = useState<Ad | null>(null);
+  const [isDeletingAd, setIsDeletingAd] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && adToDelete && !isDeletingAd) {
+        setAdToDelete(null);
+        setDeleteError(null);
+        setDeleteSuccess(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [adToDelete, isDeletingAd]);
+
   // 1. Sync active tab on subpath or tab parameter change
   useEffect(() => {
     const targetTab = (typeof route.searchParams.tab === 'string' ? route.searchParams.tab : null) || route.subPath || initialTab;
@@ -275,12 +297,34 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
     await FavoritesService.removeFavorite(adId);
   };
 
-  const handleDeleteAd = async (adId: string) => {
-    if (confirm('Are you sure you want to delete this advertisement publication permanently? This cannot be undone.')) {
-      const deleted = await AdsService.deleteAd(adId);
+  const openDeleteModal = (ad: Ad) => {
+    setAdToDelete(ad);
+    setDeleteError(null);
+    setDeleteSuccess(null);
+  };
+
+  const handleConfirmDeleteAd = async () => {
+    if (isDeletingAd || !adToDelete) return;
+    setIsDeletingAd(true);
+    setDeleteError(null);
+    setDeleteSuccess(null);
+
+    try {
+      const deleted = await AdsService.deleteAd(adToDelete.id);
       if (deleted) {
-        setMyAds(myAds.filter((ad) => ad.id !== adId));
+        setDeleteSuccess('Advertisement deleted successfully.');
+        setMyAds((prev) => prev.filter((ad) => String(ad.id) !== String(adToDelete.id) && String(ad.slug) !== String(adToDelete.slug)));
+        setTimeout(() => {
+          setAdToDelete(null);
+          setDeleteSuccess(null);
+        }, 1000);
+      } else {
+        setDeleteError('Failed to delete advertisement. Please try again.');
       }
+    } catch (err: any) {
+      setDeleteError(err?.message || 'An error occurred while deleting.');
+    } finally {
+      setIsDeletingAd(false);
     }
   };
 
@@ -417,85 +461,183 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
           <main className="col-span-1 lg:col-span-3 space-y-6">
             
             {/* SUB-TAB 1: MY ADS */}
-            {activeTab === 'ads' && (
-              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                  <h2 className="text-lg font-bold text-slate-900">My Advertisement Publications</h2>
-                  <span className="text-xs font-mono text-slate-400 font-semibold">{myAds.length} registered listings</span>
-                </div>
+            {activeTab === 'ads' && (() => {
+              const activeCount = myAds.filter((a) => a.status !== 'rejected' && a.moderationStatus !== 'rejected' && a.status !== 'paused').length;
+              const rejectedCount = myAds.filter((a) => a.status === 'rejected' || a.moderationStatus === 'rejected').length;
+              const publishedCount = myAds.filter((a) => a.status === 'published' && a.moderationStatus === 'approved').length;
+              const pendingCount = myAds.filter((a) => a.moderationStatus === 'pending' && a.status !== 'rejected').length;
+              const pausedCount = myAds.filter((a) => a.status === 'paused').length;
 
-                {myAds.length === 0 ? (
-                  <div className="text-center py-12 max-w-sm mx-auto space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mx-auto">
-                      <ListFilter className="w-6 h-6" />
+              const filteredAds = myAds.filter((ad) => {
+                const isRejected = ad.status === 'rejected' || ad.moderationStatus === 'rejected';
+                if (adFilterStatus === 'active') return !isRejected && ad.status !== 'paused';
+                if (adFilterStatus === 'rejected') return isRejected;
+                if (adFilterStatus === 'published') return ad.status === 'published' && ad.moderationStatus === 'approved';
+                if (adFilterStatus === 'pending') return ad.moderationStatus === 'pending' && !isRejected;
+                if (adFilterStatus === 'paused') return ad.status === 'paused';
+                return true; // 'all'
+              });
+
+              return (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-6">
+                  {/* Header & Sub-filter controls */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">My Advertisement Publications</h2>
+                      <p className="text-xs text-slate-400 mt-0.5">Manage active, pending review, and rejected advertisement listings</p>
                     </div>
-                    <h3 className="font-bold text-slate-800">No active postings yet</h3>
-                    <p className="text-slate-500 text-xs">Publish your first independent companion or therapeutic massage advertisement to begin generating view metrics.</p>
-                    <button
-                      onClick={() => navigateTo('/post-ad')}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm"
-                    >
-                      Post Ad Wizard
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {myAds.map((ad) => (
-                      <div 
-                        key={ad.id} 
-                        className="p-4 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col md:flex-row gap-4 items-start md:items-center justify-between"
+
+                    {/* Filter Pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setAdFilterStatus('active')}
+                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                          adFilterStatus === 'active' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                        }`}
                       >
-                        <div className="flex gap-3.5 items-center">
-                          <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-100 shrink-0">
-                            <img src={ad.profileImage} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-bold font-mono tracking-wide text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200/20 uppercase">
-                              Pending Review
-                            </span>
-                            <h4 className="font-bold text-slate-900 text-sm mt-1">{ad.title}</h4>
-                            <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
-                              <span className="capitalize">{ad.citySlug}</span>
-                              <span>&bull;</span>
-                              <span className="capitalize">{ad.categorySlug.replace('-', ' ')}</span>
+                        <span>Active</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-200/70 rounded-full">{activeCount}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAdFilterStatus('rejected')}
+                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                          adFilterStatus === 'rejected' ? 'bg-white text-rose-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <span>Rejected</span>
+                        {rejectedCount > 0 && (
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 bg-rose-100 text-rose-700 rounded-full">{rejectedCount}</span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAdFilterStatus('all')}
+                        className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                          adFilterStatus === 'all' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        <span>All</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-200/70 rounded-full">{myAds.length}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {filteredAds.length === 0 ? (
+                    <div className="text-center py-12 max-w-sm mx-auto space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mx-auto">
+                        <ListFilter className="w-6 h-6" />
+                      </div>
+                      <h3 className="font-bold text-slate-800">
+                        {adFilterStatus === 'rejected' ? 'No rejected advertisements' : 'No postings found'}
+                      </h3>
+                      <p className="text-slate-500 text-xs">
+                        {adFilterStatus === 'rejected' 
+                          ? 'All your advertisements are in good standing without moderation rejections.' 
+                          : 'Publish your advertisement to generate views and customer inquiries.'}
+                      </p>
+                      <button
+                        onClick={() => navigateTo('/post-ad')}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 px-4 rounded-lg shadow-sm"
+                      >
+                        Post Ad Wizard
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {filteredAds.map((ad) => {
+                        const isRejected = ad.status === 'rejected' || ad.moderationStatus === 'rejected';
+                        const isPublished = ad.moderationStatus === 'approved' && ad.status === 'published';
+                        const isPaused = ad.status === 'paused';
+
+                        return (
+                          <div 
+                            key={ad.id} 
+                            className={`p-4 rounded-xl border flex flex-col md:flex-row gap-4 items-start md:items-center justify-between transition ${
+                              isRejected 
+                                ? 'bg-rose-50/30 border-rose-100' 
+                                : 'bg-slate-50/50 border-slate-100'
+                            }`}
+                          >
+                            <div className="flex gap-3.5 items-start md:items-center flex-1">
+                              <div className="w-14 h-14 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                                <img src={ad.profileImage} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className={`text-[9px] font-bold font-mono tracking-wide px-1.5 py-0.5 rounded-md border uppercase ${
+                                  isRejected
+                                    ? 'text-rose-700 bg-rose-50 border-rose-200'
+                                    : isPublished
+                                    ? 'text-emerald-600 bg-emerald-50 border-emerald-200/40'
+                                    : isPaused
+                                    ? 'text-slate-600 bg-slate-100 border-slate-200'
+                                    : 'text-amber-500 bg-amber-50 border-amber-200/20'
+                                }`}>
+                                  {isRejected ? 'Rejected by Moderator' : isPublished ? 'Published' : isPaused ? 'Paused' : 'Pending Review'}
+                                </span>
+                                
+                                <h4 className="font-bold text-slate-900 text-sm mt-1 truncate">{ad.title}</h4>
+                                
+                                <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium mt-0.5">
+                                  <span className="capitalize">{ad.citySlug}</span>
+                                  <span>&bull;</span>
+                                  <span className="capitalize">{ad.categorySlug.replace('-', ' ')}</span>
+                                </div>
+
+                                {/* Rejection reason alert banner */}
+                                {isRejected && (
+                                  <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200/80 text-xs text-rose-800 flex items-start gap-2">
+                                    <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                    <div>
+                                      <span className="font-bold block text-rose-900">Rejection Reason:</span>
+                                      <span className="text-rose-700 mt-0.5 block">{ad.rejectionReason || 'Violated platform publication safety guidelines.'}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Actions buttons */}
+                            <div className="flex items-center gap-2 w-full md:w-auto border-t md:border-t-0 pt-3 md:pt-0 justify-end shrink-0">
+                              <button
+                                onClick={() => navigateTo(`/ad/${ad.slug || ad.id}`)}
+                                className="p-2 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                                title="Preview listing page"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View</span>
+                              </button>
+                              
+                              {!isRejected && (
+                                <button
+                                  onClick={() => handlePromoteAd(ad)}
+                                  className="p-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-xs"
+                                  title="Boost listing views"
+                                >
+                                  <TrendingUp className="w-3.5 h-3.5" />
+                                  <span>Promote</span>
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => openDeleteModal(ad)}
+                                className="p-2 hover:bg-rose-50 border border-slate-200 text-rose-600 hover:text-rose-700 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                                title="Delete publication"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
-                        </div>
-
-                        {/* Actions buttons */}
-                        <div className="flex items-center gap-2 w-full md:w-auto border-t md:border-t-0 pt-3 md:pt-0 justify-end">
-                          <button
-                            onClick={() => navigateTo(`/ad/${ad.slug}`)}
-                            className="p-2 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 transition"
-                            title="Preview listing page"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>View</span>
-                          </button>
-                          
-                          <button
-                            onClick={() => handlePromoteAd(ad)}
-                            className="p-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-sm"
-                            title="Boost listing views"
-                          >
-                            <TrendingUp className="w-3.5 h-3.5" />
-                            <span>Promote</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleDeleteAd(ad.id)}
-                            className="p-2 hover:bg-rose-50 border border-slate-200 text-rose-600 hover:text-rose-700 rounded-lg text-xs font-bold flex items-center gap-1 transition"
-                            title="Delete publication"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* SUB-TAB 2: FAVORITES */}
             {activeTab === 'favorites' && (
@@ -658,7 +800,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
                                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                               }`}
                             >
-                              ${amt.toLocaleString()}
+                               {amt.toLocaleString()}
                             </button>
                           ))}
                         </div>
@@ -1095,6 +1237,106 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ initialTab }) => {
         </div>
 
       </div>
+
+      {/* Modern Delete Ad Confirmation Modal */}
+      {adToDelete && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => {
+            if (!isDeletingAd) {
+              setAdToDelete(null);
+              setDeleteError(null);
+              setDeleteSuccess(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              type="button"
+              disabled={isDeletingAd}
+              onClick={() => {
+                setAdToDelete(null);
+                setDeleteError(null);
+                setDeleteSuccess(null);
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer disabled:opacity-50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Warning Icon Badge */}
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            {/* Title & Message */}
+            <div className="text-center space-y-2 mb-6">
+              <h3 className="text-lg font-bold text-slate-900">Delete Advertisement</h3>
+              <p className="text-sm text-slate-600 font-medium">
+                Are you sure you want to delete this ad?
+              </p>
+              <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl mt-2 text-left">
+                <p className="text-xs font-bold text-slate-800 line-clamp-1">{adToDelete.title}</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  This action cannot be undone and will permanently remove your listing.
+                </p>
+              </div>
+            </div>
+
+            {/* Feedback Messages */}
+            {deleteError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+                <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            {deleteSuccess && (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                <span>{deleteSuccess}</span>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={isDeletingAd}
+                onClick={() => {
+                  setAdToDelete(null);
+                  setDeleteError(null);
+                  setDeleteSuccess(null);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeletingAd}
+                onClick={handleConfirmDeleteAd}
+                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeletingAd ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <span>Delete</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

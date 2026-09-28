@@ -90,6 +90,7 @@ export interface Advertisement {
   };
   status?: AdvertisementStatus;
   moderationStatus?: ModerationStatus;
+  rejectionReason?: string;
   viewCount?: number;
   viewsCount: number; // Backward compatibility
   favoriteCount?: number;

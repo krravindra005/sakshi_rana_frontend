@@ -17,7 +17,6 @@ import {
   ArrowUpRight, 
   ArrowDownRight, 
   Clock, 
-  Eye, 
   CheckCircle, 
   ChevronRight,
   ShieldAlert as ReportIcon
@@ -62,13 +61,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
           adminPaymentService.getPayments()
         ]);
 
-        setMetrics(met);
-        setChartData(chart);
+        setMetrics(met || {});
+        setChartData(chart || {});
         
-        // Filter pending ads
-        setPendingAds(allAds.filter(a => a.moderationStatus === 'pending').slice(0, 5));
-        setRecentReports(reports.slice(0, 5));
-        setRecentPayments(payments.slice(0, 5));
+        const validAds = Array.isArray(allAds) ? allAds : [];
+        const validReports = Array.isArray(reports) ? reports : [];
+        const validPayments = Array.isArray(payments) ? payments : [];
+
+        setPendingAds(validAds.filter(a => a && a.moderationStatus === 'pending').slice(0, 5));
+        setRecentReports(validReports.slice(0, 5));
+        setRecentPayments(validPayments.slice(0, 5));
       } catch (err) {
         console.error('Error loading dashboard analytics', err);
       } finally {
@@ -102,6 +104,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
   // Color arrays for Donut Chart
   const PIE_COLORS = ['#E11D48', '#BE123C', '#F43F5E', '#FDA4AF'];
 
+  const totalUsers = metrics.totalUsers ?? metrics.total_users ?? 0;
+  const newUsers = metrics.newUsers ?? metrics.new_users ?? 0;
+  const totalAds = metrics.totalAds ?? metrics.total_ads ?? 0;
+  const publishedAds = metrics.publishedAds ?? metrics.published_ads ?? 0;
+  const pendingModeration = metrics.pendingModeration ?? metrics.pending_moderation ?? 0;
+  const openReports = metrics.openReports ?? metrics.open_reports ?? 0;
+  const totalRevenue = Number(metrics.totalRevenue ?? metrics.total_revenue ?? 0);
+
   return (
     <div className="space-y-8">
       
@@ -134,10 +144,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
             </div>
           </div>
           <div className="mt-3">
-            <h3 className="text-2xl font-black text-[#18181B]">{metrics.totalUsers}</h3>
+            <h3 className="text-2xl font-black text-[#18181B]">{totalUsers}</h3>
             <div className="flex items-center gap-1 mt-1 text-xs text-green-600 font-bold font-mono">
               <ArrowUpRight size={14} />
-              <span>+{metrics.newUsers} this week</span>
+              <span>+{newUsers} this week</span>
             </div>
           </div>
         </div>
@@ -154,10 +164,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
             </div>
           </div>
           <div className="mt-3">
-            <h3 className="text-2xl font-black text-[#18181B]">{metrics.totalAds}</h3>
+            <h3 className="text-2xl font-black text-[#18181B]">{totalAds}</h3>
             <div className="flex items-center gap-1 mt-1 text-xs text-[#667085] font-semibold font-mono">
-              <span className="text-green-600 font-bold">{metrics.publishedAds} live</span>
-              <span>• {metrics.totalAds - metrics.publishedAds} other</span>
+              <span className="text-green-600 font-bold">{publishedAds} live</span>
+              <span>• {Math.max(0, totalAds - publishedAds)} other</span>
             </div>
           </div>
         </div>
@@ -174,7 +184,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
             </div>
           </div>
           <div className="mt-3">
-            <h3 className="text-2xl font-black text-[#18181B]">{metrics.pendingModeration}</h3>
+            <h3 className="text-2xl font-black text-[#18181B]">{pendingModeration}</h3>
             <div className="flex items-center gap-1.5 mt-1 text-xs font-bold font-mono text-amber-600">
               <span className="animate-pulse flex h-2 w-2 rounded-full bg-amber-500" />
               <span>Critical moderation load</span>
@@ -194,7 +204,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
             </div>
           </div>
           <div className="mt-3">
-            <h3 className="text-2xl font-black text-rose-600">{metrics.openReports}</h3>
+            <h3 className="text-2xl font-black text-rose-600">{openReports}</h3>
             <div className="flex items-center gap-1 mt-1 text-xs text-rose-600 font-bold font-mono">
               <ArrowDownRight size={14} />
               <span>Pending resolution queue</span>
@@ -215,12 +225,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
               <p className="text-[11px] text-[#667085] font-mono">Completed payments & direct top-up sales (INR)</p>
             </div>
             <span className="text-xs font-bold font-mono text-green-700 bg-green-50 px-2.5 py-1 rounded-xl">
-              Total: ₹{metrics.totalRevenue.toLocaleString()}
+              Total: ₹{totalRevenue.toLocaleString()}
             </span>
           </div>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData.revenueLedger} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <AreaChart data={chartData?.revenueLedger || []} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#BE123C" stopOpacity={0.2}/>
@@ -290,7 +300,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
           </div>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData.cityDemographics} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <BarChart data={chartData?.cityDemographics || []} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E7EC" />
                 <XAxis dataKey="name" stroke="#667085" fontSize={10} tickLine={false} />
                 <YAxis stroke="#667085" fontSize={10} tickLine={false} />
@@ -312,7 +322,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
           </div>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData.userGrowth} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+              <BarChart data={chartData?.userGrowth || []} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E7EC" />
                 <XAxis dataKey="name" stroke="#667085" fontSize={10} tickLine={false} />
                 <YAxis stroke="#667085" fontSize={10} tickLine={false} />
@@ -369,40 +379,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
                     </td>
                   </tr>
                 ) : (
-                  pendingAds.map((ad) => (
-                    <tr key={ad.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="p-4 pl-6">
-                        <div className="flex items-center gap-3">
-                          <img 
-                            src={ad.profileImage || ad.images[0]} 
-                            alt={ad.profileName} 
-                            className="w-10 h-10 object-cover rounded-lg border border-[#E4E7EC]"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="flex flex-col">
-                            <span className="font-bold text-[#18181B] max-w-xs truncate">{ad.title}</span>
-                            <span className="text-[10px] text-[#667085] font-mono">ID: {ad.id}</span>
+                  pendingAds.map((ad) => {
+                    const thumb = ad.profileImage || (ad.images && ad.images[0]) || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=600';
+                    const categoryDisplay = ad.categorySlug ? ad.categorySlug.replace(/-/g, ' ') : (ad.category || 'Classified');
+                    return (
+                      <tr key={ad.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="p-4 pl-6">
+                          <div className="flex items-center gap-3">
+                            <img 
+                              src={thumb} 
+                              alt={ad.profileName || ad.title} 
+                              className="w-10 h-10 object-cover rounded-lg border border-[#E4E7EC]"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-bold text-[#18181B] max-w-xs truncate">{ad.title}</span>
+                              <span className="text-[10px] text-[#667085] font-mono">ID: {ad.id}</span>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-4 capitalize text-[#18181B] font-semibold">{ad.categorySlug.replace('-', ' ')}</td>
-                      <td className="p-4 capitalize text-[#667085] font-mono">{ad.citySlug}</td>
-                      <td className="p-4 font-mono text-[#667085]">{ad.userId}</td>
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase font-mono bg-amber-50 text-amber-700 border border-amber-100">
-                          PENDING VETTING
-                        </span>
-                      </td>
-                      <td className="p-4 text-right pr-6">
-                        <button 
-                          onClick={() => onNavigateToTab('moderation')}
-                          className="px-3 py-1.5 bg-[#18181B] text-white hover:bg-rose-600 transition-all font-bold rounded-lg text-[10px]"
-                        >
-                          Review Detail
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td className="p-4 capitalize text-[#18181B] font-semibold">{categoryDisplay}</td>
+                        <td className="p-4 capitalize text-[#667085] font-mono">{ad.cityName || ad.citySlug || '—'}</td>
+                        <td className="p-4 font-mono text-[#667085]">{ad.userId}</td>
+                        <td className="p-4">
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase font-mono bg-amber-50 text-amber-700 border border-amber-100">
+                            PENDING VETTING
+                          </span>
+                        </td>
+                        <td className="p-4 text-right pr-6">
+                          <button 
+                            onClick={() => onNavigateToTab('moderation')}
+                            className="px-3 py-1.5 bg-[#18181B] text-white hover:bg-rose-600 transition-all font-bold rounded-lg text-[10px]"
+                          >
+                            Review Detail
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -439,28 +453,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E4E7EC] font-mono">
-                    {recentReports.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="p-3 pl-4 text-slate-500 font-bold">{r.id}</td>
-                        <td className="p-3 font-sans font-bold text-[#18181B] truncate max-w-[120px]" title={r.reason}>
-                          {r.reason}
-                        </td>
-                        <td className="p-3 uppercase">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
-                            r.priority === 'high' || r.priority === 'critical'
-                              ? 'bg-rose-100 text-rose-700' 
-                              : 'bg-slate-100 text-slate-700'
-                          }`}>
-                            {r.priority}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className="text-[9px] font-bold uppercase text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                            {r.status}
-                          </span>
+                    {recentReports.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-slate-400 font-mono text-xs">
+                          No pending abuse reports found.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      recentReports.map((r) => (
+                        <tr key={r.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="p-3 pl-4 text-slate-500 font-bold">{r.id}</td>
+                          <td className="p-3 font-sans font-bold text-[#18181B] truncate max-w-[120px]" title={r.reason}>
+                            {r.reason}
+                          </td>
+                          <td className="p-3 uppercase">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
+                              r.priority === 'high' || r.priority === 'critical'
+                                ? 'bg-rose-100 text-rose-700' 
+                                : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              {r.priority}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="text-[9px] font-bold uppercase text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                              {r.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -476,7 +498,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
                   <span>Recent Credits Top-ups</span>
                 </h4>
                 <button 
-                  onClick={() => onNavigateToTab('payments')}
+                  onClick={() => onNavigateToTab('promotions')}
                   className="text-[11px] text-rose-600 hover:text-rose-700 font-bold"
                 >
                   View ledger
@@ -494,22 +516,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E4E7EC] font-mono">
-                    {recentPayments.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="p-3 pl-4 text-slate-500 font-bold">{p.orderId}</td>
-                        <td className="p-3 font-bold text-[#18181B]">₹{p.amount}</td>
-                        <td className="p-3 text-[#667085]">{p.paymentMethod}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
-                            p.paymentStatus === 'completed' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-rose-100 text-rose-700'
-                          }`}>
-                            {p.paymentStatus}
-                          </span>
+                    {recentPayments.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-slate-400 font-mono text-xs">
+                          No recent payment transactions recorded.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      recentPayments.map((p) => (
+                        <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="p-3 pl-4 text-slate-500 font-bold">{p.orderId}</td>
+                          <td className="p-3 font-bold text-[#18181B]">₹{p.amount}</td>
+                          <td className="p-3 text-[#667085]">{p.paymentMethod}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase ${
+                              p.paymentStatus === 'completed' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-rose-100 text-rose-700'
+                            }`}>
+                              {p.paymentStatus}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -523,3 +553,4 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigateToTab })
     </div>
   );
 };
+

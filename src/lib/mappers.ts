@@ -27,7 +27,9 @@ export function mapApiAdToFrontendAd(apiAd: any): Ad {
     bodyType: filterVals.bodyType || filterVals.body_type || undefined,
     hairColor: filterVals.hairColor || filterVals.hair_color || undefined,
     intendedAudience: filterVals.intendedAudience || filterVals.audience || undefined,
-    placeOfService: Array.isArray(filterVals.placeOfService) ? filterVals.placeOfService : (filterVals.placeOfService ? [filterVals.placeOfService] : undefined),
+    placeOfService: Array.isArray(filterVals.placeOfService) 
+      ? filterVals.placeOfService 
+      : (filterVals.placeOfService ? [filterVals.placeOfService] : []),
   };
 
   const formattedDate = apiAd.published_at 
@@ -36,20 +38,32 @@ export function mapApiAdToFrontendAd(apiAd: any): Ad {
     ? new Date(apiAd.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) 
     : 'Recently';
 
+  const categorySlug = apiAd.category?.slug || (typeof apiAd.category === 'string' ? apiAd.category : '');
+  const categoryName = apiAd.category?.name || (categorySlug ? categorySlug.replace(/-/g, ' ') : 'Classified');
+
+  const citySlug = apiAd.city?.slug || (typeof apiAd.city === 'string' ? apiAd.city : '');
+  const cityName = apiAd.city?.name || (citySlug ? citySlug.replace(/-/g, ' ') : '');
+
+  const areaSlug = apiAd.area?.slug || undefined;
+  const areaName = apiAd.area?.name || (areaSlug ? areaSlug.replace(/-/g, ' ') : undefined);
+
   return {
     id: String(apiAd.id || apiAd.uuid),
     slug: apiAd.slug || String(apiAd.uuid || apiAd.id),
-    userId: String(apiAd.user_id || ''),
-    category: apiAd.category?.slug || (apiAd.category_id ? String(apiAd.category_id) : ''),
-    categorySlug: apiAd.category?.slug || '',
+    userId: String(apiAd.user_id || apiAd.user?.id || ''),
+    category: categoryName,
+    categorySlug: categorySlug,
     location: {
       countryId: String(apiAd.country_id || ''),
       regionId: String(apiAd.region_id || ''),
       cityId: String(apiAd.city_id || ''),
       areaId: apiAd.area_id ? String(apiAd.area_id) : undefined,
     },
-    citySlug: apiAd.city?.slug || '',
-    areaSlug: apiAd.area?.slug || undefined,
+    citySlug: citySlug,
+    cityName: cityName,
+    areaSlug: areaSlug,
+    areaName: areaName,
+    price: apiAd.price ? Number(apiAd.price) : undefined,
     title: apiAd.title || 'Untitled Advertisement',
     description: apiAd.description || '',
     images: allImages,
@@ -58,11 +72,20 @@ export function mapApiAdToFrontendAd(apiAd: any): Ad {
     services: Array.isArray(apiAd.services) ? apiAd.services : [],
     contact: {
       phone: apiAd.contact_phone || apiAd.user?.phone || '',
-      whatsapp: apiAd.contact_whatsapp || apiAd.contact_phone || '',
+      whatsapp: apiAd.contact_whatsapp || apiAd.contact_phone || apiAd.user?.phone || '',
       email: apiAd.contact_email || apiAd.user?.email || '',
     },
+    user: apiAd.user ? {
+      id: String(apiAd.user.id || apiAd.user.uuid || ''),
+      name: apiAd.user.name || apiAd.user.profile?.display_name || 'Advertiser',
+      email: apiAd.user.email || '',
+      avatar: apiAd.user.profile?.avatar || apiAd.user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(apiAd.user.name || 'User')}&background=random`,
+      phone: apiAd.user.phone || apiAd.contact_phone || '',
+      createdAt: apiAd.user.created_at,
+    } : undefined,
     status: apiAd.status || 'published',
     moderationStatus: apiAd.moderation_status || 'approved',
+    rejectionReason: apiAd.rejection_reason || apiAd.reason || undefined,
     viewsCount: apiAd.view_count || 0,
     viewCount: apiAd.view_count || 0,
     favoriteCount: apiAd.favorite_count || 0,
