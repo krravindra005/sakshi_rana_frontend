@@ -42,7 +42,7 @@ const parseUrl = (): RouteInfo => {
     routeInfo.path = '/login';
   } else if (segments[0] === 'register' || segments[0] === 'signup') {
     routeInfo.path = '/register';
-  } else if (segments[0] === 'search') {
+  } else if (segments[0] === 'search' || segments[0] === 'category-city') {
     routeInfo.path = '/category-city';
   } else if (segments[0] === 'ad' && segments[1]) {
     // /ad/[slug]

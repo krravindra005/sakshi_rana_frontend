@@ -3,36 +3,84 @@ import { apiClient, ApiResponse, ApiPaginatedResponse } from '../lib/api/client'
 import { mapApiAdToFrontendAd } from '../lib/mappers';
 
 export class AdsService {
+  private static allAdsCache: Ad[] | null = null;
+  private static featuredAdsCache: Ad[] | null = null;
+  private static inFlightAll: Promise<Ad[]> | null = null;
+  private static inFlightFeatured: Promise<Ad[]> | null = null;
+
   /**
-   * Get all published ads via API V2
+   * Clear in-memory static cache
    */
-  static async getAll(forceRefresh = false): Promise<Ad[]> {
-    try {
-      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads', {
-        forceRefresh,
-        ttlMs: 60_000,
-      });
-      const items = response.data || [];
-      return items.map(mapApiAdToFrontendAd);
-    } catch {
-      return [];
-    }
+  static clearCache(): void {
+    this.allAdsCache = null;
+    this.featuredAdsCache = null;
+    this.inFlightAll = null;
+    this.inFlightFeatured = null;
   }
 
   /**
-   * Get featured advertisements via API V2
+   * Get all published ads via API V2 (cached and deduplicated)
+   */
+  static async getAll(forceRefresh = false): Promise<Ad[]> {
+    if (!forceRefresh && this.allAdsCache !== null) {
+      return this.allAdsCache;
+    }
+
+    if (!forceRefresh && this.inFlightAll !== null) {
+      return this.inFlightAll;
+    }
+
+    this.inFlightAll = (async () => {
+      try {
+        const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads', {
+          forceRefresh,
+          ttlMs: 60_000,
+        });
+        const items = response.data || [];
+        const mapped = items.map(mapApiAdToFrontendAd);
+        this.allAdsCache = mapped;
+        return mapped;
+      } catch {
+        return this.allAdsCache || [];
+      } finally {
+        this.inFlightAll = null;
+      }
+    })();
+
+    return this.inFlightAll;
+  }
+
+  /**
+   * Get featured advertisements via API V2 (cached and deduplicated)
    */
   static async getFeatured(limit?: number, forceRefresh = false): Promise<Ad[]> {
-    try {
-      const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads?featured=true', {
-        forceRefresh,
-        ttlMs: 60_000,
-      });
-      const items = (response.data || []).map(mapApiAdToFrontendAd);
-      return limit ? items.slice(0, limit) : items;
-    } catch {
-      return [];
+    if (!forceRefresh && this.featuredAdsCache !== null) {
+      return limit ? this.featuredAdsCache.slice(0, limit) : this.featuredAdsCache;
     }
+
+    if (!forceRefresh && this.inFlightFeatured !== null) {
+      const items = await this.inFlightFeatured;
+      return limit ? items.slice(0, limit) : items;
+    }
+
+    this.inFlightFeatured = (async () => {
+      try {
+        const response = await apiClient.get<ApiPaginatedResponse<any>>('/ads?featured=true', {
+          forceRefresh,
+          ttlMs: 60_000,
+        });
+        const items = (response.data || []).map(mapApiAdToFrontendAd);
+        this.featuredAdsCache = items;
+        return items;
+      } catch {
+        return this.featuredAdsCache || [];
+      } finally {
+        this.inFlightFeatured = null;
+      }
+    })();
+
+    const result = await this.inFlightFeatured;
+    return limit ? result.slice(0, limit) : result;
   }
 
   /**
@@ -79,6 +127,7 @@ export class AdsService {
     };
 
     const response = await apiClient.post<ApiResponse<any>>('/ads', payload);
+    this.clearCache();
     return mapApiAdToFrontendAd(response.data);
   }
 
@@ -87,6 +136,7 @@ export class AdsService {
    */
   static async submitAd(id: string | number): Promise<Ad> {
     const response = await apiClient.post<ApiResponse<any>>(`/ads/${id}/submit`);
+    this.clearCache();
     return mapApiAdToFrontendAd(response.data);
   }
 
@@ -108,6 +158,7 @@ export class AdsService {
    */
   static async pauseAd(id: string | number): Promise<Ad> {
     const response = await apiClient.post<ApiResponse<any>>(`/ads/${id}/pause`);
+    this.clearCache();
     return mapApiAdToFrontendAd(response.data);
   }
 
@@ -116,6 +167,7 @@ export class AdsService {
    */
   static async republishAd(id: string | number): Promise<Ad> {
     const response = await apiClient.post<ApiResponse<any>>(`/ads/${id}/republish`);
+    this.clearCache();
     return mapApiAdToFrontendAd(response.data);
   }
 
@@ -125,6 +177,7 @@ export class AdsService {
   static async deleteAd(id: string | number): Promise<boolean> {
     try {
       await apiClient.delete(`/ads/${id}`);
+      this.clearCache();
       return true;
     } catch {
       return false;

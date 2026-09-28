@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AdsService } from '../../services/ads.service';
 import { Ad } from '../../types/ad';
 import { ListingCard } from '../listings/ListingCard';
@@ -7,19 +7,32 @@ import { Sparkles, Award } from 'lucide-react';
 export const FeaturedAds: React.FC = () => {
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    let isMounted = true;
     const fetchFeatured = async () => {
       try {
         const featured = await AdsService.getFeatured(4);
-        setAds(featured);
+        if (isMounted) {
+          setAds(featured);
+        }
       } catch (err) {
         console.error('Error fetching featured ads', err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     fetchFeatured();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   if (loading) {

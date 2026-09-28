@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from '../../context/RouterContext';
 import { AdsService } from '../../services/ads.service';
 import { Ad } from '../../types/ad';
@@ -9,19 +9,32 @@ export const LatestAds: React.FC = () => {
   const { navigateTo } = useRouter();
   const [ads, setAds] = useState<Ad[]>([]);
   const [loading, setLoading] = useState(true);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
+    let isMounted = true;
     const fetchLatest = async () => {
       try {
         const latest = await AdsService.getLatest(8);
-        setAds(latest);
+        if (isMounted) {
+          setAds(latest);
+        }
       } catch (err) {
         console.error('Error fetching latest ads', err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     fetchLatest();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleViewAll = () => {
