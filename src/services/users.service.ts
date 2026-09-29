@@ -11,26 +11,29 @@ export class UsersService {
   private static draftAdKey = 'marketplace_user_draft_ad';
 
   static getProfile(): UserProfile {
-    const defaultProfile: UserProfile = {
-      id: 'usr-101',
-      name: 'Verified Advertiser',
-      email: 'advertiser@example.com',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-      phone: '+91 98765 43210',
-      joinedAt: 'July 2026',
+    const emptyProfile: UserProfile = {
+      id: '',
+      name: '',
+      email: '',
+      avatar: '',
+      phone: '',
+      joinedAt: '',
       isLoggedIn: typeof window !== 'undefined' && !!localStorage.getItem('auth_token'),
-      emailVerified: true,
-      phoneVerified: true,
+      emailVerified: false,
+      phoneVerified: false,
+      role: '',
+      roles: [],
+      permissions: [],
     };
 
     const stored = typeof window !== 'undefined' ? localStorage.getItem(this.userKey) : null;
     if (!stored) {
-      return defaultProfile;
+      return emptyProfile;
     }
     try {
       return JSON.parse(stored);
     } catch {
-      return defaultProfile;
+      return emptyProfile;
     }
   }
 
@@ -42,20 +45,68 @@ export class UsersService {
     return true;
   }
 
+  static isSuperAdmin(): boolean {
+    if (!this.isLoggedIn()) return false;
+    const profile = this.getProfile();
+    const role = profile?.role?.toLowerCase().replace(/\s+/g, '_');
+    const roles = (profile?.roles || []).map(r => r.toLowerCase().replace(/\s+/g, '_'));
+    return role === 'super_admin' || roles.includes('super_admin');
+  }
+
+  static isAdvertiser(): boolean {
+    if (!this.isLoggedIn()) return false;
+    const profile = this.getProfile();
+    const role = profile?.role?.toLowerCase().replace(/\s+/g, '_');
+    const roles = (profile?.roles || []).map(r => r.toLowerCase().replace(/\s+/g, '_'));
+    return role === 'advertiser' || roles.includes('advertiser');
+  }
+
+  /**
+   * Dynamically fetch authenticated user from the database via /api/v2/auth/me
+   */
+  static async fetchCurrentUser(): Promise<UserProfile | null> {
+    if (!this.isLoggedIn()) return null;
+    try {
+      const user = await AuthService.getCurrentUser();
+      if (!user) return null;
+      const profile: UserProfile = {
+        id: String(user.id || user.uuid),
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        avatar: user.profile?.avatar || '',
+        joinedAt: user.created_at || 'Recently',
+        isLoggedIn: true,
+        emailVerified: !!user.email_verified_at,
+        phoneVerified: !!user.phone_verified_at,
+        role: user.role || (user.roles && user.roles[0]) || '',
+        roles: user.roles || (user.role ? [user.role] : []),
+        permissions: user.permissions || [],
+      };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(this.userKey, JSON.stringify(profile));
+        window.dispatchEvent(new Event('auth_state_changed'));
+      }
+      return profile;
+    } catch {
+      return null;
+    }
+  }
+
   static async login(emailOrPhone: string, password?: string): Promise<UserProfile> {
     const user = await AuthService.login(emailOrPhone, password);
     const profile: UserProfile = {
       id: String(user.id || user.uuid),
-      name: user.name,
-      email: user.email,
-      phone: user.phone || '+91 98765 43210',
-      avatar: user.profile?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-      joinedAt: 'Recently',
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      avatar: user.profile?.avatar || '',
+      joinedAt: user.created_at || 'Recently',
       isLoggedIn: true,
       emailVerified: !!user.email_verified_at,
       phoneVerified: !!user.phone_verified_at,
-      role: user.role || (user.roles && user.roles[0]) || 'advertiser',
-      roles: user.roles || (user.role ? [user.role] : ['advertiser']),
+      role: user.role || (user.roles && user.roles[0]) || '',
+      roles: user.roles || (user.role ? [user.role] : []),
       permissions: user.permissions || [],
     };
     if (typeof window !== 'undefined') {

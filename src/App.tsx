@@ -69,6 +69,12 @@ function AppContent() {
       setCurrentUser(UsersService.getProfile());
     };
     window.addEventListener('auth_state_changed', handleAuthStateChange);
+
+    // Dynamically fetch and verify latest authenticated user from the database
+    if (UsersService.isLoggedIn()) {
+      UsersService.fetchCurrentUser().catch(() => {});
+    }
+
     return () => window.removeEventListener('auth_state_changed', handleAuthStateChange);
   }, []);
 
@@ -82,25 +88,17 @@ function AppContent() {
 
   const isAuthRoute = route.path === '/login' || route.path === '/register';
   const isUserProtectedRoute = route.path === '/post-ad' || route.path === '/dashboard';
-  const isAdminRoute = route.path === '/admin';
+  const isAdminRoute = route.path === '/admin' || route.path.startsWith('/admin/');
 
-  // Check admin role & permission authorization
-  const userRoles = currentUser?.roles || (currentUser?.role ? [currentUser.role] : []);
-  const userPermissions = currentUser?.permissions || [];
-  const isAdminUser = isLoggedIn && (
-    userRoles.includes('super_admin') ||
-    userRoles.includes('admin') ||
-    userRoles.includes('moderator') ||
-    userRoles.includes('finance') ||
-    userRoles.includes('support') ||
-    userPermissions.length > 0 ||
-    adminRole === 'Super Admin'
-  );
+  // Consistent super_admin role check
+  const userRole = (currentUser?.role || currentUser?.roles?.[0])?.toLowerCase().replace(/\s+/g, '_');
+  const userRoles = (currentUser?.roles || (currentUser?.role ? [currentUser.role] : [])).map(r => r.toLowerCase().replace(/\s+/g, '_'));
+  const isSuperAdmin = isLoggedIn && (userRole === 'super_admin' || userRoles.includes('super_admin'));
 
   // Synchronize adminRole state with real logged-in user role if available
   useEffect(() => {
     if (currentUser?.role || (currentUser?.roles && currentUser.roles.length > 0)) {
-      const roleName = currentUser.roles?.[0] || currentUser.role;
+      const roleName = (currentUser.roles?.[0] || currentUser.role)?.toLowerCase().replace(/\s+/g, '_');
       if (roleName === 'super_admin') setAdminRole('Super Admin');
       else if (roleName === 'admin') setAdminRole('Admin');
       else if (roleName === 'moderator') setAdminRole('Moderator');
@@ -111,22 +109,34 @@ function AppContent() {
 
   // Route Guard Redirection Effect (Prevents setState-in-render warning)
   useEffect(() => {
+    // 1. Unauthenticated users trying to access protected user or admin routes
     if (!isLoggedIn && (isUserProtectedRoute || isAdminRoute)) {
       const currentFullUrl = window.location.pathname + window.location.search;
       navigateTo(`/login?redirect=${encodeURIComponent(currentFullUrl)}`);
-    } else if (isAuthRoute && isLoggedIn && isVerified) {
-      const isUserAdmin = (
-        userRoles.includes('super_admin') ||
-        userRoles.includes('admin') ||
-        userRoles.includes('moderator') ||
-        userRoles.includes('finance') ||
-        userRoles.includes('support')
-      );
-      const defaultTarget = isUserAdmin ? '/admin/dashboard' : '/dashboard';
-      const redirectTarget = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : defaultTarget;
-      navigateTo(redirectTarget);
+    } 
+    // 2. Already authenticated users landing on /login or /register
+    else if (isAuthRoute && isLoggedIn && isVerified) {
+      const redirect = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : null;
+      if (isSuperAdmin) {
+        if (redirect && redirect.startsWith('/admin')) {
+          navigateTo(redirect);
+        } else {
+          navigateTo('/admin/dashboard');
+        }
+      } else {
+        // Advertiser or other non-super-admin
+        if (redirect && !redirect.startsWith('/admin')) {
+          navigateTo(redirect);
+        } else {
+          navigateTo('/dashboard');
+        }
+      }
+    } 
+    // 3. Super Admin Route Protection: If non-super_admin (such as advertiser) enters admin URL directly, redirect to Customer Dashboard
+    else if (isAdminRoute && isLoggedIn && !isSuperAdmin) {
+      navigateTo('/dashboard');
     }
-  }, [isLoggedIn, isVerified, isUserProtectedRoute, isAdminRoute, isAuthRoute, route.searchParams.redirect, userRoles]);
+  }, [isLoggedIn, isVerified, isUserProtectedRoute, isAdminRoute, isAuthRoute, route.searchParams.redirect, isSuperAdmin]);
 
   // 1. AUTHENTICATION ROUTE GUARD FOR PROTECTED USER ROUTES
   if (isUserProtectedRoute && !isLoggedIn) {
@@ -139,25 +149,25 @@ function AppContent() {
       return null;
     }
 
-    if (!isAdminUser) {
-      // 403 Forbidden Access Page for non-admin logged-in users
+    if (!isSuperAdmin) {
+      // 403 Forbidden Access Page for non-super-admin logged-in users (e.g. advertiser)
       return (
         <div className="min-h-screen flex flex-col items-center justify-center py-20 px-4 text-center bg-slate-50">
           <ShieldAlert className="w-16 h-16 text-rose-500 mb-4 animate-bounce" />
           <h1 className="text-3xl font-extrabold text-slate-900 mb-2">403 - Access Denied</h1>
           <p className="text-slate-600 max-w-md mb-6 font-mono text-sm">
-            You do not have administrative privileges to access the Admin Console.
+            Super Admin role required. You do not have permission to access the Super Admin Console.
           </p>
           <div className="flex gap-4">
             <button 
               onClick={() => navigateTo('/dashboard')} 
-              className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 transition-colors shadow-sm flex items-center gap-2"
+              className="px-6 py-2.5 bg-slate-900 text-white rounded-xl font-medium hover:bg-slate-800 transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
             >
-              <Lock size={16} /> User Dashboard
+              <Lock size={16} /> Customer Dashboard
             </button>
             <button 
               onClick={() => navigateTo('/')} 
-              className="px-6 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl font-medium hover:bg-slate-100 transition-colors shadow-sm flex items-center gap-2"
+              className="px-6 py-2.5 bg-white text-slate-700 border border-slate-200 rounded-xl font-medium hover:bg-slate-100 transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
             >
               <ArrowLeft size={16} /> Go to Marketplace
             </button>

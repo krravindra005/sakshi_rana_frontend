@@ -429,7 +429,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({ activeRole }) => {
                         <tr key={pay.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="p-4 pl-6 font-bold text-slate-500">{pay.id}</td>
                           <td className="p-4 text-[#18181B] font-semibold">
-                            {(pay as any).user?.email || (pay as any).userEmail || (pay.userId === 'usr-101' ? 'elena.v@example.com' : `User #${pay.userId}`)}
+                            {(pay as any).user?.email || (pay as any).userEmail || (pay.userId ? `User #${pay.userId}` : '—')}
                           </td>
                           <td className="p-4">{pay.paymentMethod}</td>
                           <td className="p-4 text-slate-400">{pay.transactionId}</td>
@@ -511,7 +511,7 @@ export const BusinessView: React.FC<BusinessViewProps> = ({ activeRole }) => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => handlePageUserSearch(e.target.value)}
-                    placeholder="Search users by name, email, or phone (e.g. Devon, Elena, admin@gmail.com)..."
+                    placeholder="Search users by name, email, or phone..."
                     className="w-full bg-[#F8F9FC] border border-[#E4E7EC] rounded-xl pl-10 pr-10 py-2.5 text-xs font-mono focus:outline-none focus:border-rose-500 focus:bg-white transition-all"
                   />
                   {isSearching ? (

@@ -28,9 +28,32 @@ interface AuthPageProps {
 export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClose }) => {
   const { route, navigateTo } = useRouter();
 
-  const getRedirectTarget = () => {
+  const getRedirectTarget = (userRole?: string) => {
+    const rawRole = userRole || UsersService.getProfile().role;
+    const normalizedRole = rawRole?.toLowerCase().replace(/\s+/g, '_');
+
+    if (normalizedRole === 'super_admin') {
+      const redirect = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : null;
+      if (redirect && redirect.startsWith('/admin')) {
+        return redirect;
+      }
+      return '/admin/dashboard';
+    }
+
+    if (normalizedRole === 'advertiser') {
+      const redirect = route.searchParams.redirect ? decodeURIComponent(route.searchParams.redirect) : null;
+      // An advertiser must NOT be redirected to admin routes
+      if (redirect && !redirect.startsWith('/admin')) {
+        return redirect;
+      }
+      return '/dashboard';
+    }
+
     if (route.searchParams.redirect) {
-      return decodeURIComponent(route.searchParams.redirect);
+      const redirect = decodeURIComponent(route.searchParams.redirect);
+      if (!redirect.startsWith('/admin')) {
+        return redirect;
+      }
     }
     return '/dashboard';
   };
@@ -166,14 +189,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
 
     setLoading(true);
     try {
-      await UsersService.login(loginId, loginPassword);
+      const profile = await UsersService.login(loginId, loginPassword);
       setSuccessMsg('Logged in successfully!');
       
+      const userRole = profile?.role || (profile?.roles && profile.roles[0]);
+
       setTimeout(() => {
         if (!UsersService.isFullyVerified()) {
           setMode('verify_email');
         } else {
-          navigateTo(getRedirectTarget());
+          navigateTo(getRedirectTarget(userRole));
           if (onClose) onClose();
         }
       }, 800);
@@ -356,7 +381,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ initialMode = 'login', onClo
 
   // Final access trigger
   const handleEnterPlatform = () => {
-    navigateTo(getRedirectTarget());
+    const profile = UsersService.getProfile();
+    const userRole = profile?.role || (profile?.roles && profile.roles[0]);
+    navigateTo(getRedirectTarget(userRole));
     if (onClose) onClose();
   };
 

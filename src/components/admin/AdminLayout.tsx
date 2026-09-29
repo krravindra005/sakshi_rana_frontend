@@ -58,6 +58,18 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
   const currentUser = UsersService.getProfile();
   const userPermissions = currentUser.permissions || [];
   const userRoles = currentUser.roles || (currentUser.role ? [currentUser.role] : []);
+  const userInitials = (currentUser.name || 'SA')
+    .split(' ')
+    .filter(Boolean)
+    .map((n: string) => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'SA';
+
+  const handleSignOut = () => {
+    UsersService.logout();
+    navigateTo('/');
+  };
 
   React.useEffect(() => {
     PointsService.getAdminRequests('pending').then(res => {
@@ -243,10 +255,10 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
             {!sidebarCollapsed && (
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-bold text-xs uppercase flex-shrink-0">
-                  MB
+                  {userInitials}
                 </div>
                 <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-bold truncate text-[#18181B]">Marcus Brody</span>
+                  <span className="text-xs font-bold truncate text-[#18181B]">{currentUser.name || 'Super Admin'}</span>
                   <span className="text-[9px] text-[#667085] truncate font-mono uppercase">{activeRole}</span>
                 </div>
               </div>
@@ -326,16 +338,16 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
 
               <div className="p-4 border-t border-[#E4E7EC] bg-[#F8F9FC] flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center font-extrabold text-xs">
-                  MB
+                  {userInitials}
                 </div>
                 <div className="flex flex-col min-w-0 mr-auto">
-                  <span className="text-xs font-bold truncate text-[#18181B]">Marcus Brody</span>
+                  <span className="text-xs font-bold truncate text-[#18181B]">{currentUser.name || 'Super Admin'}</span>
                   <span className="text-[10px] text-[#667085] uppercase font-mono">{activeRole}</span>
                 </div>
                 <button 
-                  onClick={() => navigateTo('/')}
-                  className="p-1.5 rounded-lg border border-[#E4E7EC] bg-white text-rose-600 hover:text-rose-700 shadow-sm"
-                  title="Return to Public Site"
+                  onClick={handleSignOut}
+                  className="p-1.5 rounded-lg border border-[#E4E7EC] bg-white text-rose-600 hover:text-rose-700 shadow-sm cursor-pointer"
+                  title="Sign Out"
                 >
                   <LogOut size={16} />
                 </button>
@@ -390,9 +402,19 @@ export const AdminLayout: React.FC<AdminLayoutProps> = ({ children, activeRole, 
               {/* Public Site Action Button */}
               <button 
                 onClick={() => navigateTo('/')}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 border border-[#E4E7EC] text-[#667085] hover:text-[#18181B] rounded-xl text-xs font-semibold bg-white shadow-xs transition-all"
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 border border-[#E4E7EC] text-[#667085] hover:text-[#18181B] rounded-xl text-xs font-semibold bg-white shadow-xs transition-all cursor-pointer"
               >
                 <span>View Public Site</span>
+                <Globe size={13} />
+              </button>
+
+              {/* Sign Out Button */}
+              <button 
+                onClick={handleSignOut}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 border border-rose-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold bg-white shadow-xs transition-all cursor-pointer"
+                title="Sign Out"
+              >
+                <span>Sign Out</span>
                 <LogOut size={13} />
               </button>
 

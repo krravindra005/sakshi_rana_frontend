@@ -138,6 +138,10 @@ export const Header: React.FC = () => {
     ? (cities.find(c => c.slug === route.city)?.name || route.city.charAt(0).toUpperCase() + route.city.slice(1))
     : 'Select Location';
 
+  const userRole = (currentUser?.role || currentUser?.roles?.[0])?.toLowerCase().replace(/\s+/g, '_');
+  const userRoles = (currentUser?.roles || (currentUser?.role ? [currentUser.role] : [])).map(r => r.toLowerCase().replace(/\s+/g, '_'));
+  const isSuperAdmin = isLoggedIn && (userRole === 'super_admin' || userRoles.includes('super_admin'));
+
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -411,6 +415,16 @@ export const Header: React.FC = () => {
                     </div>
                     
                     <div className="p-1">
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/admin/dashboard'); }}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition text-left cursor-pointer border-b border-slate-100 mb-1"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-rose-600" />
+                          Super Admin Console
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => { setIsProfileDropdownOpen(false); navigateTo('/dashboard', { tab: 'ads' }); }}
@@ -587,9 +601,18 @@ export const Header: React.FC = () => {
               </button>
               {isLoggedIn ? (
                 <>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => { setIsMobileMenuOpen(false); navigateTo('/admin/dashboard'); }}
+                      className="flex items-center gap-2 py-2 px-3 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition text-left w-full cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4.5 h-4.5 text-rose-600" />
+                      Super Admin Console
+                    </button>
+                  )}
                   <button
                     onClick={() => { setIsMobileMenuOpen(false); navigateTo('/dashboard'); }}
-                    className="flex items-center gap-2 py-2 px-3 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition text-left w-full"
+                    className="flex items-center gap-2 py-2 px-3 text-sm text-slate-600 hover:bg-slate-50 rounded-lg transition text-left w-full cursor-pointer"
                   >
                     <User className="w-4.5 h-4.5 text-slate-400" />
                     My Account
